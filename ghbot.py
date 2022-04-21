@@ -6,12 +6,12 @@ import paho.mqtt.client as mqtt
 import select
 import socket
 import sys
-from threading import Thread
+import threading
 import time
 import traceback
 
 
-class irc(Thread):
+class irc(threading.Thread):
     class session_state(Enum):
         DISCONNECTED   = 0x00  # setup socket, connect to host
         CONNECTED_NICK = 0x02  # send NICK
@@ -57,6 +57,8 @@ class irc(Thread):
         self.state_since = time.time()
 
         self.users       = dict()
+
+        self.cond_352    = threading.Condition()
 
         self.start()
 
@@ -288,6 +290,19 @@ class irc(Thread):
 
         return idx
 
+    def invoke_who_and_wait(self, user):
+        self.send(f'WHO {user}')
+
+        start = time.time()
+
+        while self.check_user_known(user) == False:
+            t_diff = time.time() - start
+
+            if t_diff >= 5.0:
+                break
+
+            with self.cond_352:
+                self.cond_352.wait(5.0 - t_diff)
 
     def invoke_internal_commands(self, prefix, command, args):
         splitted_args = None
@@ -329,9 +344,10 @@ class irc(Thread):
             cmd_idx   = self.find_key_in_list(splitted_args, 'cmd',   2)
 
             if not identifier_is_known and target_type == 'user':
-                self.send_error(f'User {check_user} not known, use "meet"')
+                self.invoke_who_and_wait(check_user)
 
-                return self.internal_command_rc.HANDLED
+                if check_user in self.users:
+                    identifier = self.users[check_user]
 
             if group_idx != None:
                 group_name = splitted_args[group_idx + 1]
@@ -366,9 +382,10 @@ class irc(Thread):
             cmd_idx   = self.find_key_in_list(splitted_args, 'cmd',   2)
 
             if not identifier_is_known and target_type == 'user':
-                self.send_error(f'User {check_user} not known, use "meet"')
+                self.invoke_who_and_wait(check_user)
 
-                return self.internal_command_rc.HANDLED
+                if check_user in self.users:
+                    identifier = self.users[check_user]
 
             if group_idx != None:
                 group_name = splitted_args[group_idx + 1]
@@ -398,19 +415,19 @@ class irc(Thread):
                 return self.internal_command_rc.ERROR
 
         elif command == 'listacls':
-            if identifier_is_known:
-                acls = self.list_acls(identifier)
+            if not identifier_is_known:
+                self.invoke_who_and_wait(check_user)
 
-                str_acls = ', '.join(acls)
+                if check_user in self.users:
+                    identifier = self.users[check_user]
 
-                self.send_ok(f'ACLs for user {identifier}: "{str_acls}"')
+            acls = self.list_acls(identifier)
 
-                return self.internal_command_rc.HANDLED
+            str_acls = ', '.join(acls)
 
-            else:
-                self.send_error(f'User identifier not known, use "meet"')
+            self.send_ok(f'ACLs for user {identifier}: "{str_acls}"')
 
-                return self.internal_command_rc.HANDLED
+            return self.internal_command_rc.HANDLED
 
         elif command == 'meet':
             if splitted_args != None and len(splitted_args) == 2:
@@ -442,6 +459,11 @@ class irc(Thread):
             elif command == '353':  # users in the channel
                 for user in args[3].split(' '):
                     self.users[user] = '?'
+
+            # 315 is 'end of who'
+            if command == '352' or command == '315':
+                with self.cond_352:
+                    self.cond_352.notify_all()
 
         elif command == 'JOIN':
             if self.state == self.session_state.CONNECTED_WAIT:
@@ -502,6 +524,15 @@ class irc(Thread):
 
         else:
             print(f'irc::run: command "{command}" is not known (for {prefix})')
+
+    def handle_irc_command_thread_wrapper(self, prefix, command, arguments):
+        try:
+            self.handle_irc_commands(prefix, command, arguments)
+
+        except Exception as e:
+            self.send_error(f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}"')
+
+            traceback.print_exc(file=sys.stdout)
 
     def run(self):
         print('irc::run: started')
@@ -580,13 +611,8 @@ class irc(Thread):
 
                 prefix, command, arguments = self.parse_irc_line(line)
 
-                try:
-                    self.handle_irc_commands(prefix, command, arguments)
-
-                except Exception as e:
-                    self.send_error(f'irc::run: exception "{e}" during execution of IRC command "{command}"')
-
-                    traceback.print_exc(file=sys.stdout)
+                t = threading.Thread(target=self.handle_irc_command_thread_wrapper, args=(prefix, command, arguments), daemon=True)
+                t.start()
 
             if not self.state in [ self.session_state.DISCONNECTED, self.session_state.DISCONNECTING, self.session_state.RUNNING ]:
                 takes = time.time() - self.state_since
@@ -596,7 +622,7 @@ class irc(Thread):
 
                     self._set_state(self.session_state.DISCONNECTING)
 
-class mqtt_handler(Thread):
+class mqtt_handler(threading.Thread):
     def __init__(self, broker_ip):
         super().__init__()
 
@@ -646,7 +672,7 @@ class mqtt_handler(Thread):
 
             self.client.loop_forever()
 
-class dbi(Thread):
+class dbi(threading.Thread):
     def __init__(self, host, user, password, database):
         super().__init__()
 
