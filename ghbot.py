@@ -1,6 +1,6 @@
 #! /usr/bin/python3
 
-from enum import IntFlag
+from enum import Enum
 import MySQLdb
 import paho.mqtt.client as mqtt
 import select
@@ -10,7 +10,7 @@ import time
 
 
 class irc(Thread):
-    class session_state(IntFlag):
+    class session_state(Enum):
         DISCONNECTED   = 0x00  # setup socket, connect to host
         CONNECTED_NICK = 0x02  # send NICK
         CONNECTED_USER = 0x03  # send USER
@@ -51,6 +51,8 @@ class irc(Thread):
         self.start()
 
     def _set_state(self, s):
+        print(f'_set_state: state changes from {self.state} to {s}')
+
         self.state = s
 
         self.state_since = time.time()
