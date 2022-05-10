@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 
 from enum import IntFlag
+import paho.mqtt.client as mqtt
 import select
 import socket
 from threading import Thread
@@ -15,8 +16,18 @@ class irc(Thread):
         RUNNING        = 0xf0  # go
         DISCONNECTING  = 0xff
 
-    def __init__(self, host, port, nick, channel):
+    def __init__(self, host, port, nick, channel, m):
         super().__init__()
+
+        self.mqtt    = m
+
+        self.topic_privmsg = f'to/irc/{channel[1:]}/privmsg'  # Send reply in channel via PRIVMSG
+        self.topic_notice  = f'to/irc/{channel[1:]}/notice'   # Send reply in channel via NOTICE
+        self.topic_topic   = f'to/irc/{channel[1:]}/topic'    # Sets TOPIC for channel
+
+        self.mqtt.subscribe(self.topic_privmsg, self._recv_msg_cb)
+        self.mqtt.subscribe(self.topic_notice,  self._recv_msg_cb)
+        self.mqtt.subscribe(self.topic_topic,   self._recv_msg_cb)
 
         self.host    = host
         self.port    = port
@@ -27,6 +38,28 @@ class irc(Thread):
         self.state   = self.session_state.DISCONNECTED
 
         self.start()
+
+    def _recv_msg_cb(self, topic, msg):
+        print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
+
+        if msg.find('\n') != -1 or msg.find('\r') != -1:
+            print(f'irc::_recv_msg_cb: invalid content to send for {topic}')
+
+            return
+
+        if topic == self.topic_privmsg:
+            self.send(f'PRIVMSG {self.channel} :{msg}')
+
+        elif topic == self.topic_notice:
+            self.send(f'NOTICE {self.channel} :{msg}')
+
+        elif topic == self.topic_topic:
+            self.send(f'TOPIC {self.channel} :{msg}')
+
+        else:
+            print(f'irc::_recv_msg_cb: invalid topic {topic}')
+
+            return
 
     def send(self, s):
         try:
@@ -77,7 +110,24 @@ class irc(Thread):
                     self.state = self.session_state.DISCONNECTING
 
         elif command == 'PING':
-            self.send(f'PONG {arguments[0]}')
+            if len(args) >= 2:
+                self.send(f'PONG {args[1]}')
+
+            else:
+                self.send(f'PONG')
+
+        elif command == 'PRIVMSG':
+            print(prefix, command, args)
+
+            if len(args) >= 2:
+                if args[1][0] == '#':
+                    self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/{args[1][1:]}', args[1])
+
+                else:
+                    self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/message', args[1])
+
+        else:
+            print(f'irc::run: command "{command}" is not known')
 
     def run(self):
         print('irc::run: started')
@@ -127,15 +177,18 @@ class irc(Thread):
             else:
                 print(f'irc::run: internal error, invalid state {self.state}')
 
-            if self.state != self.session_state.DISCONNECTED and len(self.poller.poll(100)) > 0:
-                buffer += self.fd.recv(4096).decode('ascii').strip('\r')
-
+            if self.state != self.session_state.DISCONNECTED and (len(buffer) > 0 or len(self.poller.poll(100)) > 0):
                 lf_index = buffer.find('\n')
 
                 if lf_index == -1:
-                    continue
+                    buffer += self.fd.recv(4096).decode('ascii')
 
-                line = buffer[0:lf_index]
+                    lf_index = buffer.find('\n')
+
+                    if lf_index == -1:
+                        continue
+
+                line = buffer[0:lf_index].rstrip('\r')
                 buffer = buffer[lf_index + 1:]
 
                 print(line)
@@ -143,4 +196,56 @@ class irc(Thread):
 
                 self.handle_irc_commands(prefix, command, arguments)
 
-i = irc('192.168.64.1', 6667, 'ghbot', '#test')
+class mqtt_handler(Thread):
+    def __init__(self, broker_ip):
+        super().__init__()
+
+        self.client = mqtt.Client()
+
+        self.topics = []
+
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
+
+        self.client.connect(broker_ip, 1883, 60)
+
+        self.start()
+
+    def subscribe(self, topic, msg_recv_cb):
+        print(f'mqtt_handler::topic: subscribe to {topic}')
+
+        self.topics.append((topic, msg_recv_cb))
+
+        self.client.subscribe(topic)
+
+    def publish(self, topic, content):
+        print(f'mqtt_handler::topic: publish "{content}" to "{topic}"')
+
+        self.client.publish(topic, content)
+
+    def on_connect(self, client, userdata, flags, rc):
+        for topic in self.topics:
+            print(f'mqtt_handler::topic: re-subscribe to {topic[0]}')
+
+            self.client.subscribe(topic[0])
+
+    def on_message(self, client, userdata, msg):
+        print(f'mqtt_handler::topic: received "{msg.payload}" in topic "{msg.topic}"')
+
+        for topic in self.topics:
+            if topic[0] == msg.topic:
+                topic[1](msg.topic, msg.payload.decode('ascii'))
+
+                return
+
+        print(f'mqtt_handler::topic: no handler for topic "{msg.topic}"')
+
+    def run(self):
+        while True:
+            print('mqtt_handler::run: looping')
+
+            self.client.loop_forever()
+
+m = mqtt_handler('192.168.64.1')
+
+i = irc('192.168.64.1', 6667, 'ghbot', '#test', m)
