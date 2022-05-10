@@ -133,8 +133,9 @@ class irc(Thread):
                     self.state = self.session_state.DISCONNECTING
 
         elif command == 'PING':
-            if len(args) >= 2:
-                self.send(f'PONG {args[1]}')
+            print(prefix, command, args)
+            if len(args) >= 1:
+                self.send(f'PONG {args[0]}')
 
             else:
                 self.send(f'PONG')
