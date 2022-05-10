@@ -19,6 +19,11 @@ class irc(Thread):
         RUNNING        = 0xf0  # go
         DISCONNECTING  = 0xff
 
+    class internal_command_rc(Enum):
+        HANDLED      = 0x00
+        ERROR        = 0x10
+        NOT_INTERNAL = 0xff
+
     state_timeout = 10         # state changes must not take longer than this
 
     def __init__(self, host, port, nick, channel, m, db, cmd_prefix):
@@ -94,10 +99,15 @@ class irc(Thread):
 
         return False
 
-    def send_error(self, text):
-        print(f'ERROR: {e}')
+    def send_ok(self, text):
+        print(f'OK: {text}')
 
-        send(f'PRIVMSG {self.channel} :ERROR: text')
+        self.send(f'PRIVMSG {self.channel} :{text}')
+
+    def send_error(self, text):
+        print(f'ERROR: {text}')
+
+        self.send(f'PRIVMSG {self.channel} :ERROR: {text}')
 
     def parse_irc_line(self, s):
         # from https://stackoverflow.com/questions/930700/python-parsing-irc-messages
@@ -147,8 +157,12 @@ class irc(Thread):
         try:
             cursor.execute('INSERT INTO acls(command, who) VALUES(%s, %s)', (command.lower(), who.lower()))
 
+            return True
+
         except Exception as e:
             self.send_error(f'irc::add_acl: failed to insert acl ({e})')
+
+        return False
 
     def del_acl(self, who, command):
         cursor = self.db.cursor()
@@ -156,8 +170,12 @@ class irc(Thread):
         try:
             cursor.execute('DELETE FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
 
+            return True
+
         except Exception as e:
             self.send_error(f'irc::del_acl: failed to delete acl ({e})')
+        
+        return False
 
     def group_add(self, who, group):
         cursor = self.db.cursor()
@@ -165,8 +183,12 @@ class irc(Thread):
         try:
             cursor.execute('INSERT INTO acl_groups(who, group_name) VALUES(%s, %s)', (who.lower(), group.lower()))
 
+            return True
+
         except Exception as e:
             self.send_error(f'irc::group_add: failed to insert group-member ({e})')
+
+        return False
 
     def group_del(self, who, group):
         cursor = self.db.cursor()
@@ -174,8 +196,12 @@ class irc(Thread):
         try:
             cursor.execute('DELETE FROM acl_groups WHERE who=%s AND group_name=%s LIMIT 1', (who.lower(), group.lower()))
 
+            return True
+
         except Exception as e:
             self.send_error(f'irc::group-del: failed to delete group-member ({e})')
+
+        return False
 
     def invoke_internal_commands(self, prefix, command, args):
         splitted_args = None
@@ -184,44 +210,68 @@ class irc(Thread):
             splitted_args = args[1].split(' ')
 
         if command == 'addacl':
-            if splitted_args != None and len(splitted_args) == 2:
-                self.add_acl(splitted_args[0], splitted_args[1])  # who, command
+            if splitted_args != None and len(splitted_args) == 3:
+                if self.add_acl(splitted_args[1], splitted_args[2]):  # who, command
+                    self.send_ok(f'ACL added for user {splitted_args[1]}')
 
-                return True
+                    return self.internal_command_rc.HANDLED
+
+                else:
+                    return self.internal_command_rc.ERROR
 
             else:
-                print(f'irc::invoke_internal_commands: addacl parameter(s) missing')
+                print(f'irc::invoke_internal_commands: addacl parameter(s) missing ({splitted_args} given)')
+
+                return self.internal_command_rc.ERROR
 
             return False
 
         elif command == 'delacl':
-            if splitted_args != None and len(splitted_args) == 2:
-                self.del_acl(splitted_args[0], splitted_args[1])  # who, command
+            if splitted_args != None and len(splitted_args) == 3:
+                if self.del_acl(splitted_args[1], splitted_args[2]):  # who, command
+                    self.send_ok(f'ACL deleted from user {splitted_args[1]}')
 
-                return True
+                    return self.internal_command_rc.HANDLED
+
+                else:
+                    return self.internal_command_rc.ERROR
 
             else:
-                print(f'irc::invoke_internal_commands: addacl parameter(s) missing')
+                print(f'irc::invoke_internal_commands: addacl parameter(s) missing ({splitted_args} given)')
+
+                return self.internal_command_rc.ERROR
 
         elif command == 'groupadd':
-            if splitted_args != None and len(splitted_args) == 2:
-                self.group_add(splitted_args[0], splitted_args[1])  # who, group
+            if splitted_args != None and len(splitted_args) == 3:
+                if self.group_add(splitted_args[1], splitted_args[2]):  # who, group
+                    self.send_ok(f'User {splitted_args[1]} added to ACL-group')
 
-                return True
+                    return self.internal_command_rc.HANDLED
+
+                else:
+                    return self.internal_command_rc.ERROR
 
             else:
-                print(f'irc::invoke_internal_commands: groupadd parameter(s) missing')
+                print(f'irc::invoke_internal_commands: groupadd parameter(s) missing ({splitted_args} given)')
+
+                return self.internal_command_rc.ERROR
 
         elif command == 'groupdel':
-            if splitted_args != None and len(splitted_args) == 2:
-                self.group_del(splitted_args[0], splitted_args[1])  # who, group
+            if splitted_args != None and len(splitted_args) == 3:
+                if self.group_del(splitted_args[1], splitted_args[2]):  # who, group
+                    self.send_ok(f'User {splitted_args[1]} removed from ACL-group')
 
-                return True
+                    return self.internal_command_rc.HANDLED
+
+                else:
+                    return self.internal_command_rc.ERROR
 
             else:
-                print(f'irc::invoke_internal_commands: groupdel parameter(s) missing')
+                print(f'irc::invoke_internal_commands: groupdel parameter(s) missing ({splitted_args} given)')
 
-        return False
+                return self.internal_command_rc.ERROR
+
+        return self.internal_command_rc.NOT_INTERNAL
 
     def handle_irc_commands(self, prefix, command, args):
         if len(command) == 3 and command.isnumeric():
@@ -255,11 +305,19 @@ class irc(Thread):
 
                     if self.check_acls(prefix, command):
                         # returns False when the command is not internal
-                        if self.invoke_internal_commands(prefix, command, args):
+                        rc = self.invoke_internal_commands(prefix, command, args)
+
+                        if rc == self.internal_command_rc.HANDLED:
+                            pass
+
+                        elif rc == self.internal_command_rc.NOT_INTERNAL:
+                            self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/{command}', args[1])
+
+                        elif rc == self.internal_command_rc.ERROR:
                             pass
 
                         else:
-                            self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/{command}', args[1])
+                            self.send_error(f'irc::run: unexpected return code from internal commands handler ({rc})')
 
                     else:
                         self.send_error(f'irc::run: Command "{command}" denied for user "{prefix}"')
