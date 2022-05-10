@@ -144,7 +144,7 @@ class irc(Thread):
 
         elif command == 'PRIVMSG':
             if len(args) >= 2:
-                if args[1][0] == cmd_prefix:
+                if args[1][0] == self.cmd_prefix:
                     command = args[1][1:].split(' ')[0]
 
                     if self.check_acls(prefix, command):
