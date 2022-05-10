@@ -136,6 +136,88 @@ class irc(Thread):
 
         return False
 
+    def add_acl(self, who, command):
+        cursor = self.db.cursor()
+
+        try:
+            cursor.execute('INSERT INTO acls(command, who) VALUES(%s, %s)', (command.lower(), who.lower()))
+
+        except Exception as e:
+            print(f'irc::add_acl: failed to insert acl ({e})')
+
+    def del_acl(self, who, command):
+        cursor = self.db.cursor()
+
+        try:
+            cursor.execute('DELETE FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
+
+        except Exception as e:
+            print(f'irc::del_acl: failed to delete acl ({e})')
+
+    def group_add(self, who, group):
+        cursor = self.db.cursor()
+
+        try:
+            cursor.execute('INSERT INTO acl_groups(who, group_name) VALUES(%s, %s)', (who.lower(), group.lower()))
+
+        except Exception as e:
+            print(f'irc::group_add: failed to insert group-member ({e})')
+
+    def group_del(self, who, group):
+        cursor = self.db.cursor()
+
+        try:
+            cursor.execute('DELETE FROM acl_groups WHERE who=%s AND group_name=%s LIMIT 1', (who.lower(), group.lower()))
+
+        except Exception as e:
+            print(f'irc::group-del: failed to delete group-member ({e})')
+
+    def invoke_internal_commands(self, prefix, command, args):
+        splitted_args = None
+
+        if len(args) == 2:
+            splitted_args = args[1].split(' ')
+
+        if command == 'addacl':
+            if splitted_args != None and len(splitted_args) == 2:
+                self.add_acl(splitted_args[0], splitted_args[1])  # who, command
+
+                return True
+
+            else:
+                printf(f'irc::invoke_internal_commands: addacl parameter(s) missing')
+
+            return False
+
+        elif command == 'delacl':
+            if splitted_args != None and len(splitted_args) == 2:
+                self.del_acl(splitted_args[0], splitted_args[1])  # who, command
+
+                return True
+
+            else:
+                printf(f'irc::invoke_internal_commands: addacl parameter(s) missing')
+
+        elif command == 'groupadd':
+            if splitted_args != None and len(splitted_args) == 2:
+                self.group_add(splitted_args[0], splitted_args[1])  # who, group
+
+                return True
+
+            else:
+                printf(f'irc::invoke_internal_commands: groupadd parameter(s) missing')
+
+        elif command == 'groupdel':
+            if splitted_args != None and len(splitted_args) == 2:
+                self.group_del(splitted_args[0], splitted_args[1])  # who, group
+
+                return True
+
+            else:
+                printf(f'irc::invoke_internal_commands: groupdel parameter(s) missing')
+
+        return False
+
     def handle_irc_commands(self, prefix, command, args):
         if len(command) == 3 and command.isnumeric():
             if command == '001':
@@ -167,7 +249,12 @@ class irc(Thread):
                     command = args[1][1:].split(' ')[0]
 
                     if self.check_acls(prefix, command):
-                        self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/{command}', args[1])
+                        # returns False when the command is not internal
+                        if self.invoke_internal_commands(prefix, command, args):
+                            pass
+
+                        else:
+                            self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/{command}', args[1])
 
                     else:
                         print(f'irc::run: Command "{command}" denied for user "{prefix}"')
