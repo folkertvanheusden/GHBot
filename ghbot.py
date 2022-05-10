@@ -107,12 +107,16 @@ class irc(Thread):
         # check per user ACLs
         cursor.execute('SELECT COUNT(*) FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
 
-        if cursor.fetchone()[0] == True:
+        row = cursor.fetchone()
+
+        if row[0] == 1:
             return True
 
         cursor.execute('SELECT COUNT(*) FROM acls, acl_groups WHERE acl_groups.who=%s AND acl_groups.group_name=acls.who AND command=%s LIMIT 1', (who.lower(), command.lower()))
 
-        if cursor.fetchone()[0] == True:
+        row = cursor.fetchone()
+
+        if row[0] == 1:
             return True
 
         return False
@@ -204,7 +208,11 @@ class irc(Thread):
                 lf_index = buffer.find('\n')
 
                 if lf_index == -1:
-                    buffer += self.fd.recv(4096).decode('ascii')
+                    try:
+                        buffer += self.fd.recv(4096).decode('ascii')
+
+                    except Exception as e:
+                        print(f'irc::run: cannot decode text from irc-server')
 
                     lf_index = buffer.find('\n')
 
