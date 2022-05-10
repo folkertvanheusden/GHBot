@@ -94,6 +94,11 @@ class irc(Thread):
 
         return False
 
+    def send_error(self, text):
+        print(f'ERROR: {e}')
+
+        send(f'PRIVMSG {self.channel} :ERROR: text')
+
     def parse_irc_line(self, s):
         # from https://stackoverflow.com/questions/930700/python-parsing-irc-messages
 
@@ -143,7 +148,7 @@ class irc(Thread):
             cursor.execute('INSERT INTO acls(command, who) VALUES(%s, %s)', (command.lower(), who.lower()))
 
         except Exception as e:
-            print(f'irc::add_acl: failed to insert acl ({e})')
+            self.send_error(f'irc::add_acl: failed to insert acl ({e})')
 
     def del_acl(self, who, command):
         cursor = self.db.cursor()
@@ -152,7 +157,7 @@ class irc(Thread):
             cursor.execute('DELETE FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
 
         except Exception as e:
-            print(f'irc::del_acl: failed to delete acl ({e})')
+            self.send_error(f'irc::del_acl: failed to delete acl ({e})')
 
     def group_add(self, who, group):
         cursor = self.db.cursor()
@@ -161,7 +166,7 @@ class irc(Thread):
             cursor.execute('INSERT INTO acl_groups(who, group_name) VALUES(%s, %s)', (who.lower(), group.lower()))
 
         except Exception as e:
-            print(f'irc::group_add: failed to insert group-member ({e})')
+            self.send_error(f'irc::group_add: failed to insert group-member ({e})')
 
     def group_del(self, who, group):
         cursor = self.db.cursor()
@@ -170,7 +175,7 @@ class irc(Thread):
             cursor.execute('DELETE FROM acl_groups WHERE who=%s AND group_name=%s LIMIT 1', (who.lower(), group.lower()))
 
         except Exception as e:
-            print(f'irc::group-del: failed to delete group-member ({e})')
+            self.send_error(f'irc::group-del: failed to delete group-member ({e})')
 
     def invoke_internal_commands(self, prefix, command, args):
         splitted_args = None
@@ -185,7 +190,7 @@ class irc(Thread):
                 return True
 
             else:
-                printf(f'irc::invoke_internal_commands: addacl parameter(s) missing')
+                print(f'irc::invoke_internal_commands: addacl parameter(s) missing')
 
             return False
 
@@ -196,7 +201,7 @@ class irc(Thread):
                 return True
 
             else:
-                printf(f'irc::invoke_internal_commands: addacl parameter(s) missing')
+                print(f'irc::invoke_internal_commands: addacl parameter(s) missing')
 
         elif command == 'groupadd':
             if splitted_args != None and len(splitted_args) == 2:
@@ -205,7 +210,7 @@ class irc(Thread):
                 return True
 
             else:
-                printf(f'irc::invoke_internal_commands: groupadd parameter(s) missing')
+                print(f'irc::invoke_internal_commands: groupadd parameter(s) missing')
 
         elif command == 'groupdel':
             if splitted_args != None and len(splitted_args) == 2:
@@ -214,7 +219,7 @@ class irc(Thread):
                 return True
 
             else:
-                printf(f'irc::invoke_internal_commands: groupdel parameter(s) missing')
+                print(f'irc::invoke_internal_commands: groupdel parameter(s) missing')
 
         return False
 
@@ -257,7 +262,7 @@ class irc(Thread):
                             self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/{command}', args[1])
 
                     else:
-                        print(f'irc::run: Command "{command}" denied for user "{prefix}"')
+                        self.send_error(f'irc::run: Command "{command}" denied for user "{prefix}"')
 
                 else:
                     self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/message', args[1])
@@ -295,7 +300,7 @@ class irc(Thread):
                     self._set_state(self.session_state.CONNECTED_NICK)
 
                 except Exception as e:
-                    print(f'irc::run: failed to connect: {e}')
+                    self.send_error(f'irc::run: failed to connect: {e}')
                     
                     self.fd.close()
 
@@ -329,7 +334,7 @@ class irc(Thread):
                         buffer += self.fd.recv(4096).decode('ascii')
 
                     except Exception as e:
-                        print(f'irc::run: cannot decode text from irc-server')
+                        self.send_error(f'irc::run: cannot decode text from irc-server')
 
                     lf_index = buffer.find('\n')
 
@@ -345,7 +350,7 @@ class irc(Thread):
                     self.handle_irc_commands(prefix, command, arguments)
 
                 except Exception as e:
-                    print(f'irc::run: exception "{e}" during execution of IRC command "{command}"')
+                    self.send_error(f'irc::run: exception "{e}" during execution of IRC command "{command}"')
 
             if not self.state in [ self.session_state.DISCONNECTED, self.session_state.DISCONNECTING, self.session_state.RUNNING ]:
                 takes = time.time() - self.state_since
