@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 
 from enum import IntFlag
+import MySQLdb
 import paho.mqtt.client as mqtt
 import select
 import socket
@@ -16,8 +17,10 @@ class irc(Thread):
         RUNNING        = 0xf0  # go
         DISCONNECTING  = 0xff
 
-    def __init__(self, host, port, nick, channel, m):
+    def __init__(self, host, port, nick, channel, m, db):
         super().__init__()
+
+        self.db      = db
 
         self.mqtt    = m
 
@@ -98,6 +101,22 @@ class irc(Thread):
 
         return prefix, command, args
 
+    def check_acls(self, who, command):
+        cursor = self.db.cursor()
+
+        # check per user ACLs
+        cursor.execute('SELECT COUNT(*) FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
+
+        if cursor.fetchone()[0] == True:
+            return True
+
+        cursor.execute('SELECT COUNT(*) FROM acls, acl_groups WHERE acl_groups.who=%s AND acl_groups.group_name=acls.who AND command=%s LIMIT 1', (who.lower(), command.lower()))
+
+        if cursor.fetchone()[0] == True:
+            return True
+
+        return False
+
     def handle_irc_commands(self, prefix, command, args):
         if len(command) == 3 and command.isnumeric():
             if command == '001':
@@ -117,11 +136,15 @@ class irc(Thread):
                 self.send(f'PONG')
 
         elif command == 'PRIVMSG':
-            print(prefix, command, args)
-
             if len(args) >= 2:
                 if args[1][0] == '#':
-                    self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/{args[1][1:]}', args[1])
+                    command = args[1][1:].split(' ')[0]
+
+                    if self.check_acls(prefix, command):
+                        self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/{command}', args[1])
+
+                    else:
+                        print(f'irc::run: Command "{command}" denied for user "{prefix}"')
 
                 else:
                     self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/message', args[1])
@@ -246,6 +269,8 @@ class mqtt_handler(Thread):
 
             self.client.loop_forever()
 
+db = MySQLdb.connect('mauer', 'ghbot', 'ghbot', 'ghbot')
+
 m = mqtt_handler('192.168.64.1')
 
-i = irc('192.168.64.1', 6667, 'ghbot', '#test', m)
+i = irc('192.168.64.1', 6667, 'ghbot', '#test', m, db)
