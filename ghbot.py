@@ -17,12 +17,14 @@ class irc(Thread):
         RUNNING        = 0xf0  # go
         DISCONNECTING  = 0xff
 
-    def __init__(self, host, port, nick, channel, m, db):
+    def __init__(self, host, port, nick, channel, m, db, cmd_prefix):
         super().__init__()
 
-        self.db      = db
+        self.cmd_prefix = cmd_prefix
 
-        self.mqtt    = m
+        self.db         = db
+
+        self.mqtt       = m
 
         self.topic_privmsg = f'to/irc/{channel[1:]}/privmsg'  # Send reply in channel via PRIVMSG
         self.topic_notice  = f'to/irc/{channel[1:]}/notice'   # Send reply in channel via NOTICE
@@ -32,13 +34,13 @@ class irc(Thread):
         self.mqtt.subscribe(self.topic_notice,  self._recv_msg_cb)
         self.mqtt.subscribe(self.topic_topic,   self._recv_msg_cb)
 
-        self.host    = host
-        self.port    = port
-        self.nick    = nick
-        self.channel = channel
+        self.host       = host
+        self.port       = port
+        self.nick       = nick
+        self.channel    = channel
 
-        self.fd      = None
-        self.state   = self.session_state.DISCONNECTED
+        self.fd         = None
+        self.state      = self.session_state.DISCONNECTED
 
         self.start()
 
@@ -142,7 +144,7 @@ class irc(Thread):
 
         elif command == 'PRIVMSG':
             if len(args) >= 2:
-                if args[1][0] == '#':
+                if args[1][0] == cmd_prefix:
                     command = args[1][1:].split(' ')[0]
 
                     if self.check_acls(prefix, command):
@@ -282,4 +284,4 @@ db = MySQLdb.connect('mauer', 'ghbot', 'ghbot', 'ghbot')
 
 m = mqtt_handler('192.168.64.1')
 
-i = irc('192.168.64.1', 6667, 'ghbot', '#test', m, db)
+i = irc('192.168.64.1', 6667, 'ghbot', '#test', m, db, '~')
