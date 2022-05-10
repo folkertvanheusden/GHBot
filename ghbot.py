@@ -6,6 +6,7 @@ import paho.mqtt.client as mqtt
 import select
 import socket
 from threading import Thread
+import time
 
 
 class irc(Thread):
@@ -14,17 +15,20 @@ class irc(Thread):
         CONNECTED_NICK = 0x02  # send NICK
         CONNECTED_USER = 0x03  # send USER
         CONNECTED_JOIN = 0x10  # send JOIN
+        CONNECTED_WAIT = 0x11  # wait for 'JOIN' indicating that the JOIN succeeded
         RUNNING        = 0xf0  # go
         DISCONNECTING  = 0xff
+
+    state_timeout = 10         # state changes must not take longer than this
 
     def __init__(self, host, port, nick, channel, m, db, cmd_prefix):
         super().__init__()
 
-        self.cmd_prefix = cmd_prefix
+        self.cmd_prefix  = cmd_prefix
 
-        self.db         = db
+        self.db          = db
 
-        self.mqtt       = m
+        self.mqtt        = m
 
         self.topic_privmsg = f'to/irc/{channel[1:]}/privmsg'  # Send reply in channel via PRIVMSG
         self.topic_notice  = f'to/irc/{channel[1:]}/notice'   # Send reply in channel via NOTICE
@@ -34,15 +38,22 @@ class irc(Thread):
         self.mqtt.subscribe(self.topic_notice,  self._recv_msg_cb)
         self.mqtt.subscribe(self.topic_topic,   self._recv_msg_cb)
 
-        self.host       = host
-        self.port       = port
-        self.nick       = nick
-        self.channel    = channel
+        self.host        = host
+        self.port        = port
+        self.nick        = nick
+        self.channel     = channel
 
-        self.fd         = None
-        self.state      = self.session_state.DISCONNECTED
+        self.fd          = None
+
+        self.state       = self.session_state.DISCONNECTED
+        self.state_since = time.time()
 
         self.start()
+
+    def _set_state(self, s):
+        self.state = s
+
+        self.state_since = time.time()
 
     def _recv_msg_cb(self, topic, msg):
         print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
@@ -77,7 +88,7 @@ class irc(Thread):
 
             self.fd.close()
 
-            self.state = self.session_state.DISCONNECTED
+            self._set_state(self.session_state.DISCONNECTED)
 
         return False
 
@@ -127,15 +138,21 @@ class irc(Thread):
         if len(command) == 3 and command.isnumeric():
             if command == '001':
                 if self.state == self.session_state.CONNECTED_USER:
-                    self.state = self.session_state.CONNECTED_JOIN
+                    self._set_state(self.session_state.CONNECTED_JOIN)
 
                 else:
                     print(f'irc::run: invalid state for "001" command {self.state}')
 
-                    self.state = self.session_state.DISCONNECTING
+                    self._set_state(self.session_state.DISCONNECTING)
+
+        elif command == 'JOIN':
+            if self.state == self.session_state.CONNECTED_WAIT:
+                self._set_state(self.session_state.RUNNING)
+
+            else:
+                print(f'irc::run: invalid state for "JOIN"-response {self.state}')
 
         elif command == 'PING':
-            print(prefix, command, args)
             if len(args) >= 1:
                 self.send(f'PONG {args[0]}')
 
@@ -143,7 +160,7 @@ class irc(Thread):
                 self.send(f'PONG')
 
         elif command == 'PRIVMSG':
-            if len(args) >= 2:
+            if len(args) >= 2 and len(args[1]) >= 2:
                 if args[1][0] == self.cmd_prefix:
                     command = args[1][1:].split(' ')[0]
 
@@ -155,6 +172,10 @@ class irc(Thread):
 
                 else:
                     self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/message', args[1])
+
+        elif command == 'NOTICE':
+            if len(args) >= 2:
+                self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/notice', args[1])
 
         else:
             print(f'irc::run: command "{command}" is not known')
@@ -168,7 +189,7 @@ class irc(Thread):
             if self.state == self.session_state.DISCONNECTING:
                 self.fd.close()
 
-                self.state = self.session_state.DISCONNECTED
+                self._set_state(self.session_state.DISCONNECTED)
 
             elif self.state == self.session_state.DISCONNECTED:
                 self.fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -182,7 +203,7 @@ class irc(Thread):
 
                     self.poller.register(self.fd, select.POLLIN)
 
-                    self.state = self.session_state.CONNECTED_NICK
+                    self._set_state(self.session_state.CONNECTED_NICK)
 
                 except Exception as e:
                     print(f'irc::run: failed to connect: {e}')
@@ -192,14 +213,18 @@ class irc(Thread):
             elif self.state == self.session_state.CONNECTED_NICK:
                 # apparently only error responses are returned, no acks
                 if self.send(f'NICK {self.nick}'):
-                    self.state = self.session_state.CONNECTED_USER
+                    self._set_state(self.session_state.CONNECTED_USER)
 
             elif self.state == self.session_state.CONNECTED_USER:
                 self.send(f'USER {self.nick} 0 * :{self.nick}')
 
             elif self.state == self.session_state.CONNECTED_JOIN:
                 if self.send(f'JOIN {self.channel}'):
-                    self.state = self.session_state.RUNNING
+                    self._set_state(self.session_state.CONNECTED_WAIT)
+
+            elif self.state == self.session_state.CONNECTED_WAIT:
+                # handled elsewhere
+                pass
 
             elif self.state == self.session_state.RUNNING:
                 pass
@@ -225,10 +250,21 @@ class irc(Thread):
                 line = buffer[0:lf_index].rstrip('\r')
                 buffer = buffer[lf_index + 1:]
 
-                print(line)
                 prefix, command, arguments = self.parse_irc_line(line)
 
-                self.handle_irc_commands(prefix, command, arguments)
+                try:
+                    self.handle_irc_commands(prefix, command, arguments)
+
+                except Exception as e:
+                    print(f'irc::run: exception "{e}" during execution of IRC command "{command}"')
+
+            if not self.state in [ self.session_state.DISCONNECTED, self.session_state.DISCONNECTING, self.session_state.RUNNING ]:
+                takes = time.time() - self.state_since
+
+                if takes > irc.state_timeout:
+                    print(f'irc::run: state {self.state} timeout ({takes} > {irc.state_timeout})')
+
+                    self._set_state(self.session_state.DISCONNECTING)
 
 class mqtt_handler(Thread):
     def __init__(self, broker_ip):
