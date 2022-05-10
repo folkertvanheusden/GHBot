@@ -157,6 +157,8 @@ class irc(Thread):
         try:
             cursor.execute('INSERT INTO acls(command, who) VALUES(%s, %s)', (command.lower(), who.lower()))
 
+            self.db.commit()
+
             return True
 
         except Exception as e:
@@ -169,6 +171,8 @@ class irc(Thread):
 
         try:
             cursor.execute('DELETE FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
+
+            self.db.commit()
 
             return True
 
@@ -183,6 +187,8 @@ class irc(Thread):
         try:
             cursor.execute('INSERT INTO acl_groups(who, group_name) VALUES(%s, %s)', (who.lower(), group.lower()))
 
+            self.db.commit()
+
             return True
 
         except Exception as e:
@@ -195,6 +201,8 @@ class irc(Thread):
 
         try:
             cursor.execute('DELETE FROM acl_groups WHERE who=%s AND group_name=%s LIMIT 1', (who.lower(), group.lower()))
+
+            self.db.commit()
 
             return True
 
