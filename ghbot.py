@@ -226,14 +226,14 @@ class irc(Thread):
         return False
 
     def check_user_known(self, user):
-        if not user in self.users:
-            return False
-
         if '!' in user:
             for cur_user in self.users:
                 if self.users[cur_user] == user:
                     return True
 
+            return False
+
+        if not user in self.users:
             return False
 
         if self.users[user] == None or self.users[user] == '?':
@@ -265,11 +265,29 @@ class irc(Thread):
         if len(args) == 2:
             splitted_args = args[1].split(' ')
 
+        identifier = None
+
+        if splitted_args != None and len(splitted_args) >= 2:
+            print(splitted_args[1])
+
+        if splitted_args != None and len(splitted_args) >= 2 and splitted_args[1] in self.users:
+            identifier = self.users[splitted_args[1]]
+
+        elif '!' in splitted_args[1]:
+            identifier = splitted_args[1]
+
+        elif self.is_group(splitted_args[1]):
+            identifier = splitted_args[1]
+
+        print('identifier', identifier)
+
+        identifier_is_known = (self.check_user_known(identifier) or self.is_group(identifier)) if identifier != None else False
+
+        print('know ', identifier_is_known)
+
         if command == 'addacl':
             if splitted_args != None and len(splitted_args) == 3:
-                if self.check_user_known(splitted_args[1]) or self.is_group(splitted_args[1]):
-                    identifier = splitted_args[1] if '!' in splitted_args[1] else self.users[splitted_args[1]]
-
+                if identifier_is_known:
                     if self.add_acl(identifier, splitted_args[2]):  # who, command
                         self.send_ok(f'ACL added for user {splitted_args[1]}')
 
@@ -292,9 +310,7 @@ class irc(Thread):
 
         elif command == 'delacl':
             if splitted_args != None and len(splitted_args) == 3:
-                if self.check_user_known(splitted_args[1]) or self.is_group(splitted_args[1]):
-                    identifier = splitted_args[1] if '!' in splitted_args[1] else self.users[splitted_args[1]]
-
+                if identifier_is_known:
                     if self.del_acl(identifier, splitted_args[2]):  # who, command
                         self.send_ok(f'ACL deleted from user {splitted_args[1]}')
 
@@ -315,9 +331,7 @@ class irc(Thread):
 
         elif command == 'groupadd':
             if splitted_args != None and len(splitted_args) == 3:
-                if self.check_user_known(splitted_args[1]) or self.is_group(splitted_args[1]):
-                    identifier = splitted_args[1] if '!' in splitted_args[1] else self.users[splitted_args[1]]
-
+                if identifier_is_known:
                     if self.group_add(identifier, splitted_args[2]):  # who, group
                         self.send_ok(f'User {splitted_args[1]} added to ACL-group')
 
@@ -338,9 +352,7 @@ class irc(Thread):
 
         elif command == 'groupdel':
             if splitted_args != None and len(splitted_args) == 3:
-                if self.check_user_known(splitted_args[1]) or self.is_group(splitted_args[1]):
-                    identifier = splitted_args[1] if '!' in splitted_args[1] else self.users[splitted_args[1]]
-
+                if identifier_is_known:
                     if self.group_del(identifier, splitted_args[2]):  # who, group
                         self.send_ok(f'User {splitted_args[1]} removed from ACL-group')
 
