@@ -282,57 +282,123 @@ class irc(Thread):
 
         identifier = None
 
+        check_user = '(not given)'
+
         if splitted_args != None and len(splitted_args) >= 2:
-            if splitted_args[1] in self.users:
-                identifier = self.users[splitted_args[1]]
+            check_user = splitted_args[1]
 
-            elif '!' in splitted_args[1]:
-                identifier = splitted_args[1]
+            if check_user in self.users:
+                identifier = self.users[check_user]
 
-            elif self.is_group(splitted_args[1]):
-                identifier = splitted_args[1]
+            elif '!' in check_user:
+                identifier = check_user
+
+            elif self.is_group(check_user):
+                identifier = check_user
 
         identifier_is_known = (self.check_user_known(identifier) or self.is_group(identifier)) if identifier != None else False
 
         if command == 'addacl':
-            if splitted_args != None and len(splitted_args) == 3:
-                if identifier_is_known:
-                    if self.add_acl(identifier, splitted_args[2]):  # who, command
-                        self.send_ok(f'ACL added for user {splitted_args[1]}')
+            try:
+                group_idx = splitted_args.index('group')
 
-                        return self.internal_command_rc.HANDLED
+                # check if an argument is following it
+                if group_idx == len(splitted_args) - 1:
+                    group_idx = None
 
-                    else:
-                        return self.internal_command_rc.ERROR
+            except ValueError as ve:
+                group_idx = None
 
-                else:
-                    self.send_error(f'User {splitted_args[1]} not known, use "meet"')
+            try:
+                cmd_idx   = splitted_args.index('cmd')
+
+                if cmd_idx == len(splitted_args) - 1:
+                    cmd_idx = None
+
+            except ValueError as ve:
+                cmd_idx = None
+
+            if not identifier_is_known:
+                self.send_error(f'User {check_user} not known, use "meet"')
+
+                return self.internal_command_rc.HANDLED
+
+            if group_idx != None:
+                group_name = splitted_args[group_idx + 1]
+
+                if self.group_add(identifier, group_name):  # who, group
+                    self.send_ok(f'User {identifier} added to group {group_name}')
 
                     return self.internal_command_rc.HANDLED
 
+                else:
+                    return self.internal_command_rc.ERROR
+
+            elif cmd_idx != None:
+                cmd_name = splitted_args[cmd_idx + 1]
+
+                if self.add_acl(identifier, cmd_name):  # who, command
+                    self.send_ok(f'ACL added for user {identifier} for command {cmd_name}')
+
+                    return self.internal_command_rc.HANDLED
+
+                else:
+                    return self.internal_command_rc.ERROR
+
             else:
-                self.send_error(f'irc::invoke_internal_commands: addacl parameter(s) missing ({splitted_args} given)')
+                self.send_error(f'Usage: addacl <user> group|cmd <group-name|cmd-name>')
 
                 return self.internal_command_rc.ERROR
 
         elif command == 'delacl':
-            if splitted_args != None and len(splitted_args) == 3:
-                if identifier_is_known:
-                    if self.del_acl(identifier, splitted_args[2]):  # who, command
-                        self.send_ok(f'ACL deleted from user {splitted_args[1]}')
+            try:
+                group_idx = splitted_args.index('group')
 
-                        return self.internal_command_rc.HANDLED
+                # check if an argument is following it
+                if group_idx == len(splitted_args) - 1:
+                    group_idx = None
 
-                    else:
-                        return self.internal_command_rc.ERROR
+            except ValueError as ve:
+                group_idx = None
 
-                else:
-                    self.send_error(f'User {splitted_args[1]} not known, use "meet"')
+            try:
+                cmd_idx   = splitted_args.index('cmd')
+
+                if cmd_idx == len(splitted_args) - 1:
+                    cmd_idx = None
+
+            except ValueError as ve:
+                cmd_idx = None
+
+            if not identifier_is_known and cmd_idx != None:
+                self.send_error(f'User {check_user} not known, use "meet"')
+
+                return self.internal_command_rc.HANDLED
+
+            if group_idx != None:
+                group_name = splitted_args[group_idx + 1]
+
+                if self.group_del(identifier, group_name):  # who, group
+                    self.send_ok(f'User {identifier} removed from group {group_name}')
 
                     return self.internal_command_rc.HANDLED
 
+                else:
+                    return self.internal_command_rc.ERROR
+
+            elif cmd_idx != None:
+                cmd_name = splitted_args[cmd_idx + 1]
+
+                if self.del_acl(identifier, cmd_name):  # who, command
+                    self.send_ok(f'ACL removed for user {identifier} for command {cmd_name}')
+
+                    return self.internal_command_rc.HANDLED
+
+                else:
+                    return self.internal_command_rc.ERROR
+
             else:
-                self.send_error(f'irc::invoke_internal_commands: addacl parameter(s) missing ({splitted_args} given)')
+                self.send_error(f'Usage: delacl <user> group|cmd <group-name|cmd-name>')
 
                 return self.internal_command_rc.ERROR
 
@@ -350,48 +416,6 @@ class irc(Thread):
                 self.send_error(f'User identifier not known, use "meet"')
 
                 return self.internal_command_rc.HANDLED
-
-        elif command == 'groupadd':
-            if splitted_args != None and len(splitted_args) == 3:
-                if identifier_is_known:
-                    if self.group_add(identifier, splitted_args[2]):  # who, group
-                        self.send_ok(f'User {splitted_args[1]} added to ACL-group')
-
-                        return self.internal_command_rc.HANDLED
-
-                    else:
-                        return self.internal_command_rc.ERROR
-
-                else:
-                    self.send_error(f'User {splitted_args[1]} not known, use "meet"')
-
-                    return self.internal_command_rc.HANDLED
-
-            else:
-                self.send_error(f'irc::invoke_internal_commands: groupadd parameter(s) missing ({splitted_args} given)')
-
-                return self.internal_command_rc.ERROR
-
-        elif command == 'groupdel':
-            if splitted_args != None and len(splitted_args) == 3:
-                if identifier_is_known:
-                    if self.group_del(identifier, splitted_args[2]):  # who, group
-                        self.send_ok(f'User {splitted_args[1]} removed from ACL-group')
-
-                        return self.internal_command_rc.HANDLED
-
-                    else:
-                        return self.internal_command_rc.ERROR
-
-                else:
-                    self.send_error(f'User {splitted_args[1]} not known, use "meet"')
-
-                    return self.internal_command_rc.HANDLED
-
-            else:
-                self.send_error(f'irc::invoke_internal_commands: groupdel parameter(s) missing ({splitted_args} given)')
-
-                return self.internal_command_rc.ERROR
 
         elif command == 'meet':
             if splitted_args != None and len(splitted_args) == 2:
