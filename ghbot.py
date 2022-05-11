@@ -349,7 +349,7 @@ class irc(Thread):
                 return self.internal_command_rc.HANDLED
 
             else:
-                self.send_error(f'User {splitted_args[1]} not known, use "meet"')
+                self.send_error(f'User identifier not known, use "meet"')
 
                 return self.internal_command_rc.HANDLED
 
