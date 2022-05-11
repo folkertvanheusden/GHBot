@@ -509,7 +509,7 @@ class irc(Thread):
                     if lf_index == -1:
                         continue
 
-                line = buffer[0:lf_index].rstrip('\r')
+                line = buffer[0:lf_index].rstrip('\r').strip()
                 buffer = buffer[lf_index + 1:]
 
                 prefix, command, arguments = self.parse_irc_line(line)
