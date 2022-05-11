@@ -16,6 +16,7 @@ class irc(Thread):
         DISCONNECTED   = 0x00  # setup socket, connect to host
         CONNECTED_NICK = 0x02  # send NICK
         CONNECTED_USER = 0x03  # send USER
+        USER_WAIT      = 0x08  # wait for USER ack
         CONNECTED_JOIN = 0x10  # send JOIN
         CONNECTED_WAIT = 0x11  # wait for 'JOIN' indicating that the JOIN succeeded
         RUNNING        = 0xf0  # go
@@ -379,7 +380,7 @@ class irc(Thread):
 
         if len(command) == 3 and command.isnumeric():
             if command == '001':
-                if self.state == self.session_state.CONNECTED_USER:
+                if self.state == self.session_state.USER_WAIT:
                     self._set_state(self.session_state.CONNECTED_JOIN)
 
                 else:
@@ -492,11 +493,16 @@ class irc(Thread):
                     self._set_state(self.session_state.CONNECTED_USER)
 
             elif self.state == self.session_state.CONNECTED_USER:
-                self.send(f'USER {self.nick} 0 * :{self.nick}')
+                if self.send(f'USER {self.nick} 0 * :{self.nick}'):
+                    self._set_state(self.session_state.USER_WAIT)
 
             elif self.state == self.session_state.CONNECTED_JOIN:
                 if self.send(f'JOIN {self.channel}'):
                     self._set_state(self.session_state.CONNECTED_WAIT)
+
+            elif self.state == self.session_state.USER_WAIT:
+                # handled elsewhere
+                pass
 
             elif self.state == self.session_state.CONNECTED_WAIT:
                 # handled elsewhere
