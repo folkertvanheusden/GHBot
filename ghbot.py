@@ -274,18 +274,43 @@ class irc(Thread):
 
         return False
 
+    # e.g. 'group', 'bla' where 'group' is the key and 'bla' the value
+    def find_key_in_list(self, list_, item, search_start):
+        try:
+            idx = list_.index(item, search_start)
+
+            # check if an argument is following it
+            if idx == len(list_) - 1:
+                idx = None
+
+        except ValueError as ve:
+            idx = None
+
+        return idx
+
+
     def invoke_internal_commands(self, prefix, command, args):
         splitted_args = None
 
         if len(args) == 2:
             splitted_args = args[1].split(' ')
 
-        identifier = None
+        identifier  = None
 
-        check_user = '(not given)'
+        target_type = None
+
+        check_user  = '(not given)'
 
         if splitted_args != None and len(splitted_args) >= 2:
-            check_user = splitted_args[1]
+            if len(splitted_args) >= 3:  # addacl
+                target_type = splitted_args[1]
+
+                check_user = splitted_args[2]
+
+            else:
+                target_type = None
+
+                check_user = splitted_args[1]
 
             if check_user in self.users:
                 identifier = self.users[check_user]
@@ -299,26 +324,11 @@ class irc(Thread):
         identifier_is_known = (self.check_user_known(identifier) or self.is_group(identifier)) if identifier != None else False
 
         if command == 'addacl':
-            try:
-                group_idx = splitted_args.index('group')
+            group_idx = self.find_key_in_list(splitted_args, 'group', 2)
 
-                # check if an argument is following it
-                if group_idx == len(splitted_args) - 1:
-                    group_idx = None
+            cmd_idx   = self.find_key_in_list(splitted_args, 'cmd',   2)
 
-            except ValueError as ve:
-                group_idx = None
-
-            try:
-                cmd_idx   = splitted_args.index('cmd')
-
-                if cmd_idx == len(splitted_args) - 1:
-                    cmd_idx = None
-
-            except ValueError as ve:
-                cmd_idx = None
-
-            if not identifier_is_known:
+            if not identifier_is_known and target_type == 'user':
                 self.send_error(f'User {check_user} not known, use "meet"')
 
                 return self.internal_command_rc.HANDLED
@@ -346,31 +356,16 @@ class irc(Thread):
                     return self.internal_command_rc.ERROR
 
             else:
-                self.send_error(f'Usage: addacl <user> group|cmd <group-name|cmd-name>')
+                self.send_error(f'Usage: addacl user|group <user|group> group|cmd <group-name|cmd-name>')
 
                 return self.internal_command_rc.ERROR
 
         elif command == 'delacl':
-            try:
-                group_idx = splitted_args.index('group')
+            group_idx = self.find_key_in_list(splitted_args, 'group', 2)
 
-                # check if an argument is following it
-                if group_idx == len(splitted_args) - 1:
-                    group_idx = None
+            cmd_idx   = self.find_key_in_list(splitted_args, 'cmd',   2)
 
-            except ValueError as ve:
-                group_idx = None
-
-            try:
-                cmd_idx   = splitted_args.index('cmd')
-
-                if cmd_idx == len(splitted_args) - 1:
-                    cmd_idx = None
-
-            except ValueError as ve:
-                cmd_idx = None
-
-            if not identifier_is_known and cmd_idx != None:
+            if not identifier_is_known and target_type == 'user':
                 self.send_error(f'User {check_user} not known, use "meet"')
 
                 return self.internal_command_rc.HANDLED
