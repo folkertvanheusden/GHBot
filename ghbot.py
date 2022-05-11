@@ -132,7 +132,9 @@ class irc(Thread):
         return prefix, command, args
 
     def check_acls(self, who, command):
-        cursor = self.db.cursor()
+        self.db.probe()  # to prevent those pesky "sever has gone away" problems
+
+        cursor = self.db.db.cursor()
 
         # check per user ACLs
         cursor.execute('SELECT COUNT(*) FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
@@ -152,12 +154,14 @@ class irc(Thread):
         return False
 
     def add_acl(self, who, command):
-        cursor = self.db.cursor()
+        self.db.probe()
+
+        cursor = self.db.db.cursor()
 
         try:
             cursor.execute('INSERT INTO acls(command, who) VALUES(%s, %s)', (command.lower(), who.lower()))
 
-            self.db.commit()
+            self.db.db.commit()
 
             return True
 
@@ -167,12 +171,14 @@ class irc(Thread):
         return False
 
     def del_acl(self, who, command):
-        cursor = self.db.cursor()
+        self.db.probe()
+
+        cursor = self.db.db.cursor()
 
         try:
             cursor.execute('DELETE FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
 
-            self.db.commit()
+            self.db.db.commit()
 
             return True
 
@@ -182,12 +188,14 @@ class irc(Thread):
         return False
 
     def group_add(self, who, group):
-        cursor = self.db.cursor()
+        self.db.probe()
+
+        cursor = self.db.db.cursor()
 
         try:
             cursor.execute('INSERT INTO acl_groups(who, group_name) VALUES(%s, %s)', (who.lower(), group.lower()))
 
-            self.db.commit()
+            self.db.db.commit()
 
             return True
 
@@ -197,12 +205,14 @@ class irc(Thread):
         return False
 
     def group_del(self, who, group):
-        cursor = self.db.cursor()
+        self.db.probe()
+
+        cursor = self.db.db.cursor()
 
         try:
             cursor.execute('DELETE FROM acl_groups WHERE who=%s AND group_name=%s LIMIT 1', (who.lower(), group.lower()))
 
-            self.db.commit()
+            self.db.db.commit()
 
             return True
 
@@ -476,7 +486,42 @@ class mqtt_handler(Thread):
 
             self.client.loop_forever()
 
-db = MySQLdb.connect('mauer', 'ghbot', 'ghbot', 'ghbot')
+class dbi(Thread):
+    def __init__(self, host, user, password, database):
+        super().__init__()
+
+        self.host = host
+        self.user = user
+        self.password = password
+        self.database = database
+
+        self.reconnect()
+
+        self.start()
+
+    def reconnect(self):
+        self.db = MySQLdb.connect(self.host, self.user, self.password, self.database)
+
+    def probe(self):
+        try:
+            cursor = self.db.cursor()
+
+            cursor.execute('SELECT NOW()')
+
+            cursor.fetchone()
+
+        except Exception as e:
+            print(f'MySQL indicated error: {e}')
+
+            self.reconnect()
+
+    def run(self):
+        while True:
+            self.probe()
+
+            time.sleep(29)
+
+db = dbi('mauer', 'ghbot', 'ghbot', 'ghbot')
 
 m = mqtt_handler('192.168.64.1')
 
