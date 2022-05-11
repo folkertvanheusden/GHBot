@@ -5,8 +5,10 @@ import MySQLdb
 import paho.mqtt.client as mqtt
 import select
 import socket
+import sys
 from threading import Thread
 import time
+import traceback
 
 
 class irc(Thread):
@@ -24,7 +26,7 @@ class irc(Thread):
         ERROR        = 0x10
         NOT_INTERNAL = 0xff
 
-    state_timeout = 10         # state changes must not take longer than this
+    state_timeout = 30         # state changes must not take longer than this
 
     def __init__(self, host, port, nick, channel, m, db, cmd_prefix):
         super().__init__()
@@ -52,6 +54,8 @@ class irc(Thread):
 
         self.state       = self.session_state.DISCONNECTED
         self.state_since = time.time()
+
+        self.users       = dict()
 
         self.start()
 
@@ -221,6 +225,40 @@ class irc(Thread):
 
         return False
 
+    def check_user_known(self, user):
+        if not user in self.users:
+            return False
+
+        if '!' in user:
+            for cur_user in self.users:
+                if self.users[cur_user] == user:
+                    return True
+
+            return False
+
+        if self.users[user] == None or self.users[user] == '?':
+            return False
+
+        return True
+
+    def is_group(self, group):
+        self.db.probe()
+
+        cursor = self.db.db.cursor()
+
+        try:
+            cursor.execute('SELECT COUNT(*) FROM acl_groups WHERE group_name=%s LIMIT 1', (group.lower(), ))
+
+            row = cursor.fetchone()
+
+            if row[0] >= 1:
+                return True
+
+        except Exception as e:
+            self.send_error(f'irc::is_group: failed to query database for group {group} ({e})')
+
+        return False
+
     def invoke_internal_commands(self, prefix, command, args):
         splitted_args = None
 
@@ -229,16 +267,22 @@ class irc(Thread):
 
         if command == 'addacl':
             if splitted_args != None and len(splitted_args) == 3:
-                if self.add_acl(splitted_args[1], splitted_args[2]):  # who, command
-                    self.send_ok(f'ACL added for user {splitted_args[1]}')
+                if self.check_user_known(splitted_args[1]) or self.is_group(splitted_args[1]):
+                    if self.add_acl(splitted_args[1], splitted_args[2]):  # who, command
+                        self.send_ok(f'ACL added for user {splitted_args[1]}')
+
+                        return self.internal_command_rc.HANDLED
+
+                    else:
+                        return self.internal_command_rc.ERROR
+
+                else:
+                    self.send_error(f'User {splitted_args[1]} not known, use "meet"')
 
                     return self.internal_command_rc.HANDLED
 
-                else:
-                    return self.internal_command_rc.ERROR
-
             else:
-                print(f'irc::invoke_internal_commands: addacl parameter(s) missing ({splitted_args} given)')
+                self.send_error(f'irc::invoke_internal_commands: addacl parameter(s) missing ({splitted_args} given)')
 
                 return self.internal_command_rc.ERROR
 
@@ -246,52 +290,79 @@ class irc(Thread):
 
         elif command == 'delacl':
             if splitted_args != None and len(splitted_args) == 3:
-                if self.del_acl(splitted_args[1], splitted_args[2]):  # who, command
-                    self.send_ok(f'ACL deleted from user {splitted_args[1]}')
+                if self.check_user_known(splitted_args[1]) or self.is_group(splitted_args[1]):
+                    if self.del_acl(splitted_args[1], splitted_args[2]):  # who, command
+                        self.send_ok(f'ACL deleted from user {splitted_args[1]}')
+
+                        return self.internal_command_rc.HANDLED
+
+                    else:
+                        return self.internal_command_rc.ERROR
+
+                else:
+                    self.send_error(f'User {splitted_args[1]} not known, use "meet"')
 
                     return self.internal_command_rc.HANDLED
 
-                else:
-                    return self.internal_command_rc.ERROR
-
             else:
-                print(f'irc::invoke_internal_commands: addacl parameter(s) missing ({splitted_args} given)')
+                self.send_error(f'irc::invoke_internal_commands: addacl parameter(s) missing ({splitted_args} given)')
 
                 return self.internal_command_rc.ERROR
 
         elif command == 'groupadd':
             if splitted_args != None and len(splitted_args) == 3:
-                if self.group_add(splitted_args[1], splitted_args[2]):  # who, group
-                    self.send_ok(f'User {splitted_args[1]} added to ACL-group')
+                if self.check_user_known(splitted_args[1]) or self.is_group(splitted_args[1]):
+                    if self.group_add(splitted_args[1], splitted_args[2]):  # who, group
+                        self.send_ok(f'User {splitted_args[1]} added to ACL-group')
+
+                        return self.internal_command_rc.HANDLED
+
+                    else:
+                        return self.internal_command_rc.ERROR
+
+                else:
+                    self.send_error(f'User {splitted_args[1]} not known, use "meet"')
 
                     return self.internal_command_rc.HANDLED
 
-                else:
-                    return self.internal_command_rc.ERROR
-
             else:
-                print(f'irc::invoke_internal_commands: groupadd parameter(s) missing ({splitted_args} given)')
+                self.send_error(f'irc::invoke_internal_commands: groupadd parameter(s) missing ({splitted_args} given)')
 
                 return self.internal_command_rc.ERROR
 
         elif command == 'groupdel':
             if splitted_args != None and len(splitted_args) == 3:
-                if self.group_del(splitted_args[1], splitted_args[2]):  # who, group
-                    self.send_ok(f'User {splitted_args[1]} removed from ACL-group')
+                if self.check_user_known(splitted_args[1]) or self.is_group(splitted_args[1]):
+                    if self.group_del(splitted_args[1], splitted_args[2]):  # who, group
+                        self.send_ok(f'User {splitted_args[1]} removed from ACL-group')
+
+                        return self.internal_command_rc.HANDLED
+
+                    else:
+                        return self.internal_command_rc.ERROR
+
+                else:
+                    self.send_error(f'User {splitted_args[1]} not known, use "meet"')
 
                     return self.internal_command_rc.HANDLED
 
-                else:
-                    return self.internal_command_rc.ERROR
-
             else:
-                print(f'irc::invoke_internal_commands: groupdel parameter(s) missing ({splitted_args} given)')
+                self.send_error(f'irc::invoke_internal_commands: groupdel parameter(s) missing ({splitted_args} given)')
 
                 return self.internal_command_rc.ERROR
+
+        elif command == 'meet':
+            if splitted_args != None and len(splitted_args) == 2:
+                self.send(f'WHO {splitted_args[1]}')
+
+            else:
+                self.send_error(f'irc::invoke_internal_commands: meet parameter missing ({splitted_args} given)')
 
         return self.internal_command_rc.NOT_INTERNAL
 
     def handle_irc_commands(self, prefix, command, args):
+        print(prefix, '|', command, '|', args)
+
         if len(command) == 3 and command.isnumeric():
             if command == '001':
                 if self.state == self.session_state.CONNECTED_USER:
@@ -302,12 +373,33 @@ class irc(Thread):
 
                     self._set_state(self.session_state.DISCONNECTING)
 
+            elif command == '352':  # reponse to 'WHO'
+                self.users[args[5]] = f'{args[5]}!{args[2]}@{args[3]}'
+
+                print(f'{args[5]} is {self.users[args[5]]}')
+
+            elif command == '353':  # users in the channel
+                for user in args[3].split(' '):
+                    self.users[user] = '?'
+
         elif command == 'JOIN':
             if self.state == self.session_state.CONNECTED_WAIT:
                 self._set_state(self.session_state.RUNNING)
 
-            else:
-                print(f'irc::run: invalid state for "JOIN"-response {self.state}')
+            self.users[prefix.split('!')[0]] = prefix.lower()
+
+        elif command == 'PART':
+            del self.users[prefix.split('!')[0]]
+
+        elif command == 'KICK':
+            del self.users[args[1]]
+
+        elif command == 'NICK':
+            lower_prefix = prefix.lower()
+
+            del self.users[user]
+
+            self.users[args[0]] = lower_prefix
 
         elif command == 'PING':
             if len(args) >= 1:
@@ -348,7 +440,7 @@ class irc(Thread):
                 self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/notice', args[1])
 
         else:
-            print(f'irc::run: command "{command}" is not known')
+            print(f'irc::run: command "{command}" is not known (for {prefix})')
 
     def run(self):
         print('irc::run: started')
@@ -427,6 +519,8 @@ class irc(Thread):
 
                 except Exception as e:
                     self.send_error(f'irc::run: exception "{e}" during execution of IRC command "{command}"')
+
+                    traceback.print_exc(file=sys.stdout)
 
             if not self.state in [ self.session_state.DISCONNECTED, self.session_state.DISCONNECTING, self.session_state.RUNNING ]:
                 takes = time.time() - self.state_since
