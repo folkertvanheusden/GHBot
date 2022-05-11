@@ -158,6 +158,20 @@ class irc(Thread):
 
         return False
 
+    def list_acls(self, who):
+        self.db.probe()
+
+        cursor = self.db.db.cursor()
+
+        cursor.execute('SELECT DISTINCT item FROM (SELECT command AS item FROM acls WHERE who=%s UNION SELECT group_name AS item FROM acl_groups WHERE who=%s) AS in_', (who.lower(), who.lower()))
+
+        out = []
+
+        for row in cursor:
+            out.append(row[0])
+
+        return out
+
     def add_acl(self, who, command):
         self.db.probe()
 
@@ -323,6 +337,21 @@ class irc(Thread):
                 self.send_error(f'irc::invoke_internal_commands: addacl parameter(s) missing ({splitted_args} given)')
 
                 return self.internal_command_rc.ERROR
+
+        elif command == 'listacls':
+            if identifier_is_known:
+                acls = self.list_acls(identifier)
+
+                str_acls = ', '.join(acls)
+
+                self.send_ok(f'ACLs for user {identifier}: "{str_acls}"')
+
+                return self.internal_command_rc.HANDLED
+
+            else:
+                self.send_error(f'User {splitted_args[1]} not known, use "meet"')
+
+                return self.internal_command_rc.HANDLED
 
         elif command == 'groupadd':
             if splitted_args != None and len(splitted_args) == 3:
