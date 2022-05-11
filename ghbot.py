@@ -142,18 +142,18 @@ class irc(Thread):
         cursor = self.db.db.cursor()
 
         # check per user ACLs
-        cursor.execute('SELECT COUNT(*) FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
+        cursor.execute('SELECT COUNT(*) FROM acls WHERE command=%s AND who=%s', (command.lower(), who.lower()))
 
         row = cursor.fetchone()
 
-        if row[0] == 1:
+        if row[0] >= 1:
             return True
 
-        cursor.execute('SELECT COUNT(*) FROM acls, acl_groups WHERE acl_groups.who=%s AND acl_groups.group_name=acls.who AND command=%s LIMIT 1', (who.lower(), command.lower()))
+        cursor.execute('SELECT COUNT(*) FROM acls, acl_groups WHERE acl_groups.who=%s AND acl_groups.group_name=acls.who AND command=%s', (who.lower(), command.lower()))
 
         row = cursor.fetchone()
 
-        if row[0] == 1:
+        if row[0] >= 1:
             return True
 
         return False
@@ -163,7 +163,7 @@ class irc(Thread):
 
         cursor = self.db.db.cursor()
 
-        cursor.execute('SELECT DISTINCT item FROM (SELECT command AS item FROM acls WHERE who=%s UNION SELECT group_name AS item FROM acl_groups WHERE who=%s) AS in_', (who.lower(), who.lower()))
+        cursor.execute('SELECT DISTINCT item FROM (SELECT command AS item FROM acls WHERE who=%s UNION SELECT group_name AS item FROM acl_groups WHERE who=%s) AS in_ ORDER BY item', (who.lower(), who.lower()))
 
         out = []
 
@@ -314,8 +314,6 @@ class irc(Thread):
                 self.send_error(f'irc::invoke_internal_commands: addacl parameter(s) missing ({splitted_args} given)')
 
                 return self.internal_command_rc.ERROR
-
-            return False
 
         elif command == 'delacl':
             if splitted_args != None and len(splitted_args) == 3:
@@ -474,7 +472,7 @@ class irc(Thread):
                             self.send_error(f'irc::run: unexpected return code from internal commands handler ({rc})')
 
                     else:
-                        self.send_error(f'irc::run: Command "{command}" denied for user "{prefix}"')
+                        self.send_error(f'irc::run: Command "{command}" denied (or does not exist) for user "{prefix}"')
 
                 else:
                     self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/message', args[1])
