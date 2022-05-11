@@ -268,22 +268,16 @@ class irc(Thread):
         identifier = None
 
         if splitted_args != None and len(splitted_args) >= 2:
-            print(splitted_args[1])
+            if splitted_args[1] in self.users:
+                identifier = self.users[splitted_args[1]]
 
-        if splitted_args != None and len(splitted_args) >= 2 and splitted_args[1] in self.users:
-            identifier = self.users[splitted_args[1]]
+            elif '!' in splitted_args[1]:
+                identifier = splitted_args[1]
 
-        elif '!' in splitted_args[1]:
-            identifier = splitted_args[1]
-
-        elif self.is_group(splitted_args[1]):
-            identifier = splitted_args[1]
-
-        print('identifier', identifier)
+            elif self.is_group(splitted_args[1]):
+                identifier = splitted_args[1]
 
         identifier_is_known = (self.check_user_known(identifier) or self.is_group(identifier)) if identifier != None else False
-
-        print('know ', identifier_is_known)
 
         if command == 'addacl':
             if splitted_args != None and len(splitted_args) == 3:
