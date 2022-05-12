@@ -208,6 +208,28 @@ class irc(threading.Thread):
         
         return False
 
+    # new_fullname is the new 'nick!user@host'
+    def update_acls(self, who, new_fullname):
+        self.db.probe()
+
+        match_ = who + '!%'
+
+        cursor = self.db.db.cursor()
+
+        try:
+            cursor.execute('UPDATE acls SET who=%s WHERE who LIKE %s', (new_fullname, match_))
+
+            cursor.execute('UPDATE acl_groups SET who=%s WHERE who LIKE %s', (new_fullname, match_))
+
+            self.db.db.commit()
+
+            return True
+
+        except Exception as e:
+            self.send_error(f'irc::update_acls: failed to update acls ({e})')
+        
+        return False
+
     def group_add(self, who, group):
         self.db.probe()
 
@@ -431,7 +453,17 @@ class irc(threading.Thread):
 
         elif command == 'meet':
             if splitted_args != None and len(splitted_args) == 2:
-                self.send(f'WHO {splitted_args[1]}')
+                user_to_update = splitted_args[1]
+
+                self.invoke_who_and_wait(user_to_update)
+
+                if user_to_update in self.users:
+                    self.update_acls(user_to_update, self.users[user_to_update])
+
+                    self.send_ok(f'irc::invoke_internal_commands: user {user_to_update} updated to {self.users[user_to_update]}')
+
+                else:
+                    self.send_error(f'irc::invoke_internal_commands: user {user_to_update} is not known')
 
             else:
                 self.send_error(f'irc::invoke_internal_commands: meet parameter missing ({splitted_args} given)')
