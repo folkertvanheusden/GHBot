@@ -40,12 +40,14 @@ class irc(threading.Thread):
 
         self.plugins     = dict()
 
-        self.hardcoded_plugins = [ 'addacl', 'delacl', 'listacls', 'meet' ]
+        self.hardcoded_plugins = [ 'addacl', 'delacl', 'listacls', 'meet', 'commands', 'help' ]
 
         self.plugins['addacl']   = ('Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops')
         self.plugins['delacl']   = ('Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops')
         self.plugins['listacls'] = ('List all ACLs for a user or group', 'sysops')
         self.plugins['meet']     = ('Use this when a user (nick) has a new hostname', 'sysops')
+        self.plugins['commands'] = ('Show list of known commands', None)
+        self.plugins['help']     = ('Help for commands, parameter is the command to get help for', None)
 
         self.topic_privmsg  = f'to/irc/{channel[1:]}/privmsg'  # Send reply in channel via PRIVMSG
         self.topic_notice   = f'to/irc/{channel[1:]}/notice'   # Send reply in channel via NOTICE
@@ -192,11 +194,15 @@ class irc(threading.Thread):
         return prefix, command, args
 
     def check_acls(self, who, command):
+        # "no group" is for everyone
+        if command in self.plugins and self.plugins[command][1] == None:
+            return True
+
         self.db.probe()  # to prevent those pesky "sever has gone away" problems
 
         cursor = self.db.db.cursor()
 
-        # check per user ACLs
+        # check per user ACLs (can override group as defined in plugin)
         cursor.execute('SELECT COUNT(*) FROM acls WHERE command=%s AND who=%s', (command.lower(), who.lower()))
 
         row = cursor.fetchone()
@@ -204,7 +210,16 @@ class irc(threading.Thread):
         if row[0] >= 1:
             return True
 
+        # check per group ACLs (can override group as defined in plugin)
         cursor.execute('SELECT COUNT(*) FROM acls, acl_groups WHERE acl_groups.who=%s AND acl_groups.group_name=acls.who AND command=%s', (who.lower(), command.lower()))
+
+        row = cursor.fetchone()
+
+        if row[0] >= 1:
+            return True
+
+        # check if user is in group as specified by plugin
+        cursor.execute('SELECT COUNT(*) FROM acl_groups WHERE group_name=%s AND who=%s', (self.plugins[command][1], who))
 
         row = cursor.fetchone()
 
@@ -379,6 +394,17 @@ class irc(threading.Thread):
             with self.cond_352:
                 self.cond_352.wait(5.0 - t_diff)
 
+    def list_plugins(self):
+        plugins = ''
+
+        for plugin in self.plugins:
+            if plugins != '':
+                plugins += ', '
+
+            plugins += plugin
+
+        self.send_ok(f'Known commands: {plugins}')
+
     def invoke_internal_commands(self, prefix, command, args):
         splitted_args = None
 
@@ -526,6 +552,26 @@ class irc(threading.Thread):
 
             else:
                 self.send_error(f'irc::invoke_internal_commands: meet parameter missing ({splitted_args} given)')
+
+        elif command == 'commands':
+            self.list_plugins()
+
+            return self.internal_command_rc.HANDLED
+
+        elif command == 'help':
+            if len(splitted_args) == 2:
+                cmd = splitted_args[1]
+
+                if cmd in self.plugins:
+                    self.send_ok(f'command {cmd}: {self.plugins[cmd][0]} (group: {self.plugins[cmd][1]})')
+
+                else:
+                    self.send_error(f'command/plugin not known')
+
+            else:
+                self.list_plugins()
+
+            return self.internal_command_rc.HANDLED
 
         return self.internal_command_rc.NOT_INTERNAL
 
