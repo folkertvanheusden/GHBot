@@ -74,6 +74,8 @@ class irc(threading.Thread):
 
         self.cond_352    = threading.Condition()
 
+        self.more        = ''
+
         self.name = 'GHBot IRC'
         self.start()
 
@@ -149,7 +151,7 @@ class irc(threading.Thread):
 
     def send(self, s):
         try:
-            self.fd.send(f'{s}\r\n'.encode('ascii'))
+            self.fd.send(f'{s}\r\n'.encode('utf-8'))
 
             return True
 
@@ -546,13 +548,13 @@ class irc(threading.Thread):
                 if user_to_update in self.users:
                     self.update_acls(user_to_update, self.users[user_to_update])
 
-                    self.send_ok(f'irc::invoke_internal_commands: user {user_to_update} updated to {self.users[user_to_update]}')
+                    self.send_ok(f'User {user_to_update} updated to {self.users[user_to_update]}')
 
                 else:
-                    self.send_error(f'irc::invoke_internal_commands: user {user_to_update} is not known')
+                    self.send_error(f'User {user_to_update} is not known')
 
             else:
-                self.send_error(f'irc::invoke_internal_commands: meet parameter missing ({splitted_args} given)')
+                self.send_error(f'Meet parameter missing ({splitted_args} given)')
 
         elif command == 'commands':
             self.list_plugins()
@@ -564,10 +566,10 @@ class irc(threading.Thread):
                 cmd = splitted_args[1]
 
                 if cmd in self.plugins:
-                    self.send_ok(f'command {cmd}: {self.plugins[cmd][0]} (group: {self.plugins[cmd][1]})')
+                    self.send_ok(f'Command {cmd}: {self.plugins[cmd][0]} (group: {self.plugins[cmd][1]})')
 
                 else:
-                    self.send_error(f'command/plugin not known')
+                    self.send_error(f'Command/plugin not known')
 
             else:
                 self.list_plugins()
@@ -646,7 +648,7 @@ class irc(threading.Thread):
                     command = args[1][1:].split(' ')[0]
 
                     if not command in self.plugins:
-                        self.send_error(f'irc::run: Command "{command}" is not known')
+                        self.send_error(f'Command "{command}" is not known')
 
                     elif self.check_acls(prefix, command):
                         # returns False when the command is not internal
@@ -665,7 +667,7 @@ class irc(threading.Thread):
                             self.send_error(f'irc::run: unexpected return code from internal commands handler ({rc})')
 
                     else:
-                        self.send_error(f'irc::run: Command "{command}" denied for user "{prefix}"')
+                        self.send_error(f'Command "{command}" denied for user "{prefix}"')
 
                 else:
                     self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/message', args[1])
@@ -748,7 +750,7 @@ class irc(threading.Thread):
 
                 if lf_index == -1:
                     try:
-                        buffer += self.fd.recv(4096).decode('ascii')
+                        buffer += self.fd.recv(4096).decode('utf-8')
 
                     except Exception as e:
                         self.send_error(f'irc::run: cannot decode text from irc-server')
@@ -819,7 +821,7 @@ class mqtt_handler(threading.Thread):
 
         for topic in self.topics:
             if topic[0] == msg.topic:
-                topic[1](msg.topic, msg.payload.decode('ascii'))
+                topic[1](msg.topic, msg.payload.decode('utf-8'))
 
                 return
 
