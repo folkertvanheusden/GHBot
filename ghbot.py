@@ -478,11 +478,21 @@ class irc(threading.Thread):
             del self.users[args[1]]
 
         elif command == 'NICK':
-            lower_prefix = prefix.lower()
+            old_lower_prefix = prefix.lower()
 
-            del self.users[user]
+            excl_mark    = old_lower_prefix.find('!')
 
-            self.users[args[0]] = lower_prefix
+            old_user     = old_lower_prefix[0:excl_mark]
+
+            del self.users[old_user]
+        
+            new_user     = args[0]
+
+            new_prefix   = new_user + old_lower_prefix[excl_mark:]
+
+            self.users[new_user] = new_prefix
+
+            print(f'{old_lower_prefix} => {new_prefix}')
 
         elif command == 'PING':
             if len(args) >= 1:
