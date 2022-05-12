@@ -38,13 +38,25 @@ class irc(threading.Thread):
 
         self.mqtt        = m
 
-        self.topic_privmsg = f'to/irc/{channel[1:]}/privmsg'  # Send reply in channel via PRIVMSG
-        self.topic_notice  = f'to/irc/{channel[1:]}/notice'   # Send reply in channel via NOTICE
-        self.topic_topic   = f'to/irc/{channel[1:]}/topic'    # Sets TOPIC for channel
+        self.plugins     = dict()
 
-        self.mqtt.subscribe(self.topic_privmsg, self._recv_msg_cb)
-        self.mqtt.subscribe(self.topic_notice,  self._recv_msg_cb)
-        self.mqtt.subscribe(self.topic_topic,   self._recv_msg_cb)
+        self.hardcoded_plugins = [ 'addacl', 'delacl', 'listacls', 'meet' ]
+
+        self.plugins['addacl']   = ('Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops')
+        self.plugins['delacl']   = ('Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops')
+        self.plugins['listacls'] = ('List all ACLs for a user or group', 'sysops')
+        self.plugins['meet']     = ('Use this when a user (nick) has a new hostname', 'sysops')
+
+        self.topic_privmsg  = f'to/irc/{channel[1:]}/privmsg'  # Send reply in channel via PRIVMSG
+        self.topic_notice   = f'to/irc/{channel[1:]}/notice'   # Send reply in channel via NOTICE
+        self.topic_topic    = f'to/irc/{channel[1:]}/topic'    # Sets TOPIC for channel
+
+        self.topic_register = f'to/bot/register'  # topic where plugins announce themselves
+
+        self.mqtt.subscribe(self.topic_privmsg,  self._recv_msg_cb)
+        self.mqtt.subscribe(self.topic_notice,   self._recv_msg_cb)
+        self.mqtt.subscribe(self.topic_topic,    self._recv_msg_cb)
+        self.mqtt.subscribe(self.topic_register, self._recv_msg_cb)
 
         self.host        = host
         self.port        = port
@@ -60,6 +72,7 @@ class irc(threading.Thread):
 
         self.cond_352    = threading.Condition()
 
+        self.name = 'GHBot IRC'
         self.start()
 
     def _set_state(self, s):
@@ -69,8 +82,43 @@ class irc(threading.Thread):
 
         self.state_since = time.time()
 
+    def _register_plugin(self, msg):
+        try:
+            elements = msg.split('|')
+
+            cmd       = None
+            descr     = ''
+            acl_group = None
+
+            for element in elements:
+                k, v = element.split('=')
+
+                if k == 'cmd':
+                    cmd = v
+                
+                elif k == 'descr':
+                    descr = v
+
+                elif k == 'agrp':
+                    acl_group = v
+
+            if cmd != None:
+                if not cmd in self.hardcoded_plugins:
+                    self.plugins[cmd] = (descr, acl_group)
+
+                else:
+                    print(f'_register_plugin: cannot override "hardcoded" plugin ({cmd})')
+
+            else:
+                print(f'_register_plugin: cmd missing in plugin registration')
+
+        except Exception as e:
+            print(f'_register_plugin: problem while processing plugin registration "{msg}"')
+
     def _recv_msg_cb(self, topic, msg):
         print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
+
+        topic = topic[len(self.mqtt.get_topix_prefix()):]
 
         if msg.find('\n') != -1 or msg.find('\r') != -1:
             print(f'irc::_recv_msg_cb: invalid content to send for {topic}')
@@ -85,6 +133,11 @@ class irc(threading.Thread):
 
         elif topic == self.topic_topic:
             self.send(f'TOPIC {self.channel} :{msg}')
+
+        elif topic == self.topic_register:
+            print(f'irc::_recv_msg_cb: plugin announcement {msg}')
+
+            self._register_plugin(msg)
 
         else:
             print(f'irc::_recv_msg_cb: invalid topic {topic}')
@@ -385,13 +438,19 @@ class irc(threading.Thread):
             elif cmd_idx != None:
                 cmd_name = splitted_args[cmd_idx + 1]
 
-                if self.add_acl(identifier, cmd_name):  # who, command
-                    self.send_ok(f'ACL added for user {identifier} for command {cmd_name}')
+                if cmd_name in self.plugins:
+                    if self.add_acl(identifier, cmd_name):  # who, command
+                        self.send_ok(f'ACL added for user {identifier} for command {cmd_name}')
 
-                    return self.internal_command_rc.HANDLED
+                        return self.internal_command_rc.HANDLED
+
+                    else:
+                        return self.internal_command_rc.ERROR
 
                 else:
-                    return self.internal_command_rc.ERROR
+                    self.send_error(f'ACL added for user {identifier} for command {cmd_name} NOT added: command/plugin not known')
+
+                    return self.internal_command_rc.HANDLED
 
             else:
                 self.send_error(f'Usage: addacl user|group <user|group> group|cmd <group-name|cmd-name>')
@@ -471,7 +530,8 @@ class irc(threading.Thread):
         return self.internal_command_rc.NOT_INTERNAL
 
     def handle_irc_commands(self, prefix, command, args):
-        print(prefix, '|', command, '|', args)
+        if command != 'PING':
+            print(prefix, '|', command, '|', args)
 
         if len(command) == 3 and command.isnumeric():
             if command == '001':
@@ -538,7 +598,10 @@ class irc(threading.Thread):
                 if args[1][0] == self.cmd_prefix:
                     command = args[1][1:].split(' ')[0]
 
-                    if self.check_acls(prefix, command):
+                    if not command in self.plugins:
+                        self.send_error(f'irc::run: Command "{command}" is not known')
+
+                    elif self.check_acls(prefix, command):
                         # returns False when the command is not internal
                         rc = self.invoke_internal_commands(prefix, command, args)
 
@@ -555,7 +618,7 @@ class irc(threading.Thread):
                             self.send_error(f'irc::run: unexpected return code from internal commands handler ({rc})')
 
                     else:
-                        self.send_error(f'irc::run: Command "{command}" denied (or does not exist) for user "{prefix}"')
+                        self.send_error(f'irc::run: Command "{command}" denied for user "{prefix}"')
 
                 else:
                     self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/message', args[1])
@@ -654,6 +717,7 @@ class irc(threading.Thread):
                 prefix, command, arguments = self.parse_irc_line(line)
 
                 t = threading.Thread(target=self.handle_irc_command_thread_wrapper, args=(prefix, command, arguments), daemon=True)
+                t.name = 'GHBot input'
                 t.start()
 
             if not self.state in [ self.session_state.DISCONNECTED, self.session_state.DISCONNECTING, self.session_state.RUNNING ]:
@@ -665,10 +729,12 @@ class irc(threading.Thread):
                     self._set_state(self.session_state.DISCONNECTING)
 
 class mqtt_handler(threading.Thread):
-    def __init__(self, broker_ip):
+    def __init__(self, broker_ip, topic_prefix):
         super().__init__()
 
         self.client = mqtt.Client()
+
+        self.topic_prefix = topic_prefix
 
         self.topics = []
 
@@ -677,19 +743,23 @@ class mqtt_handler(threading.Thread):
 
         self.client.connect(broker_ip, 1883, 60)
 
+        self.name = 'GHBot MQTT'
         self.start()
 
+    def get_topix_prefix(self):
+        return self.topic_prefix
+
     def subscribe(self, topic, msg_recv_cb):
-        print(f'mqtt_handler::topic: subscribe to {topic}')
+        print(f'mqtt_handler::topic: subscribe to {self.topic_prefix}{topic}')
 
-        self.topics.append((topic, msg_recv_cb))
+        self.topics.append((self.topic_prefix + topic, msg_recv_cb))
 
-        self.client.subscribe(topic)
+        self.client.subscribe(self.topic_prefix + topic)
 
     def publish(self, topic, content):
-        print(f'mqtt_handler::topic: publish "{content}" to "{topic}"')
+        print(f'mqtt_handler::topic: publish "{content}" to "{self.topic_prefix}{topic}"')
 
-        self.client.publish(topic, content)
+        self.client.publish(self.topic_prefix + topic, content)
 
     def on_connect(self, client, userdata, flags, rc):
         for topic in self.topics:
@@ -725,6 +795,7 @@ class dbi(threading.Thread):
 
         self.reconnect()
 
+        self.name = 'GHBot MySQL'
         self.start()
 
     def reconnect(self):
@@ -751,6 +822,6 @@ class dbi(threading.Thread):
 
 db = dbi('mauer', 'ghbot', 'ghbot', 'ghbot')
 
-m = mqtt_handler('192.168.64.1')
+m = mqtt_handler('192.168.64.1', 'GHBot/')
 
 i = irc('192.168.64.1', 6667, 'ghbot', '#test', m, db, '~')
