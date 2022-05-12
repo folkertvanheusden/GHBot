@@ -106,6 +106,9 @@ class irc(threading.Thread):
 
             if cmd != None:
                 if not cmd in self.hardcoded_plugins:
+                    if not cmd in self.plugins:
+                        print(f'_register_plugin: first announcement of {cmd}')
+
                     self.plugins[cmd] = (descr, acl_group)
 
                 else:
@@ -137,8 +140,6 @@ class irc(threading.Thread):
             self.send(f'TOPIC {self.channel} :{msg}')
 
         elif topic == self.topic_register:
-            print(f'irc::_recv_msg_cb: plugin announcement {msg}')
-
             self._register_plugin(msg)
 
         else:
