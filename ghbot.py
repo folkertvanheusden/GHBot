@@ -651,6 +651,7 @@ class irc(threading.Thread):
 
             return self.internal_command_rc.HANDLED
 
+        return self.internal_command_rc.NOT_INTERNAL
 
     def handle_irc_commands(self, prefix, command, args):
         if command != 'PING':
