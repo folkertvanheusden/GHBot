@@ -41,11 +41,12 @@ class irc(threading.Thread):
 
         self.plugins     = dict()
 
-        self.hardcoded_plugins = [ 'addacl', 'delacl', 'listacls', 'meet', 'commands', 'help', 'more' ]
+        self.hardcoded_plugins = [ 'addacl', 'delacl', 'listacls', 'forget', 'meet', 'commands', 'help', 'more' ]
 
         self.plugins['addacl']   = ('Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops')
         self.plugins['delacl']   = ('Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops')
         self.plugins['listacls'] = ('List all ACLs for a user or group', 'sysops')
+        self.plugins['forget']   = ('Forget a person; removes all ACLs for that nick', 'sysops')
         self.plugins['meet']     = ('Use this when a user (nick) has a new hostname', 'sysops')
         self.plugins['commands'] = ('Show list of known commands', None)
         self.plugins['help']     = ('Help for commands, parameter is the command to get help for', None)
@@ -310,6 +311,25 @@ class irc(threading.Thread):
         
         return False
 
+    def forget_acls(self, who):
+        match_ = who + '!%'
+
+        cursor = self.db.db.cursor()
+
+        try:
+            cursor.execute('DELETE FROM acls WHERE who LIKE %s', (match_,))
+
+            cursor.execute('DELETE FROM acl_groups WHERE who LIKE %s', (match_,))
+
+            self.db.db.commit()
+
+            return True
+
+        except Exception as e:
+            self.send_error(f'irc::forget_acls: failed to forget acls for {match_}: {e}')
+        
+        return False
+
     # new_fullname is the new 'nick!user@host'
     def update_acls(self, who, new_fullname):
         self.db.probe()
@@ -562,11 +582,15 @@ class irc(threading.Thread):
                 if check_user in self.users:
                     identifier = self.users[check_user]
 
-            acls = self.list_acls(identifier)
+            if identifier != None:
+                acls = self.list_acls(identifier)
 
-            str_acls = ', '.join(acls)
+                str_acls = ', '.join(acls)
 
-            self.send_ok(f'ACLs for user {identifier}: "{str_acls}"')
+                self.send_ok(f'ACLs for user {identifier}: "{str_acls}"')
+
+            else:
+                self.send_error('Please provide a nick')
 
             return self.internal_command_rc.HANDLED
 
@@ -612,7 +636,21 @@ class irc(threading.Thread):
 
             return self.internal_command_rc.HANDLED
 
-        return self.internal_command_rc.NOT_INTERNAL
+        elif command == 'forget':
+            if len(splitted_args) == 2:
+                user = splitted_args[1]
+
+                if self.forget_acls(user):
+                    self.send_ok(f'User {user} forgotten')
+
+                else:
+                    self.send_error(f'User {user} not known or some other error')
+
+            else:
+                self.send_error(f'User not specified')
+
+            return self.internal_command_rc.HANDLED
+
 
     def handle_irc_commands(self, prefix, command, args):
         if command != 'PING':
