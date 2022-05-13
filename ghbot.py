@@ -82,6 +82,13 @@ class irc(threading.Thread):
         self.name = 'GHBot IRC'
         self.start()
 
+        # ask plugins to register themselves so that we know which
+        # commands are available (and what they're for etc.)
+        self._plugin_command('register')
+
+    def _plugin_command(self, cmd):
+        self.mqtt.publish('from/bot/command', cmd)
+
     def _set_state(self, s):
         print(f'_set_state: state changes from {self.state} to {s}')
 
