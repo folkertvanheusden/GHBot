@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 
 from enum import Enum
+import math
 import MySQLdb
 import paho.mqtt.client as mqtt
 import select
@@ -40,7 +41,7 @@ class irc(threading.Thread):
 
         self.plugins     = dict()
 
-        self.hardcoded_plugins = [ 'addacl', 'delacl', 'listacls', 'meet', 'commands', 'help' ]
+        self.hardcoded_plugins = [ 'addacl', 'delacl', 'listacls', 'meet', 'commands', 'help', 'more' ]
 
         self.plugins['addacl']   = ('Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops')
         self.plugins['delacl']   = ('Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops')
@@ -48,6 +49,7 @@ class irc(threading.Thread):
         self.plugins['meet']     = ('Use this when a user (nick) has a new hostname', 'sysops')
         self.plugins['commands'] = ('Show list of known commands', None)
         self.plugins['help']     = ('Help for commands, parameter is the command to get help for', None)
+        self.plugins['more']     = ('Continue outputting a too long line of text', None)
 
         self.topic_privmsg  = f'to/irc/{channel[1:]}/privmsg'  # Send reply in channel via PRIVMSG
         self.topic_notice   = f'to/irc/{channel[1:]}/notice'   # Send reply in channel via NOTICE
@@ -167,7 +169,36 @@ class irc(threading.Thread):
     def send_ok(self, text):
         print(f'OK: {text}')
 
-        self.send(f'PRIVMSG {self.channel} :{text}')
+        # 200 is arbitrary: does the irc server give a hint on this value?
+        if len(text) > 200:
+            self.more = text[200:]
+
+            n = math.ceil(len(self.more) / 200)
+
+            self.send(f'PRIVMSG {self.channel} :{text[0:200]} ({n} ~more)')
+
+        else:
+            self.send(f'PRIVMSG {self.channel} :{text}')
+
+            self.more = ''
+
+    def send_more(self):
+        if self.more == '':
+            self.send(f'PRIVMSG {self.channel} :No more ~more')
+
+        else:
+            current_more = self.more[0:200]
+
+            if len(self.more) > 200:
+                self.more = self.more[200:]
+
+            else:
+                self.more = ''
+
+            n = math.ceil(len(self.more) / 200)
+
+            self.send(f'PRIVMSG {self.channel} :{current_more} ({n} ~more)')
+
 
     def send_error(self, text):
         print(f'ERROR: {text}')
@@ -573,6 +604,11 @@ class irc(threading.Thread):
 
             else:
                 self.list_plugins()
+
+            return self.internal_command_rc.HANDLED
+
+        elif command == 'more':
+            self.send_more()
 
             return self.internal_command_rc.HANDLED
 
