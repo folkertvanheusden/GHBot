@@ -96,6 +96,9 @@ class irc(threading.Thread):
 
         self.state_since = time.time()
 
+    def get_state(self):
+        return self.state
+
     def _register_plugin(self, msg):
         try:
             elements = msg.split('|')
@@ -951,8 +954,40 @@ class dbi(threading.Thread):
 
             time.sleep(29)
 
+class irc_keepalive(threading.Thread):
+    def __init__(self, i):
+        super().__init__()
+
+        self.i = i
+
+        self.name = 'GHBot keepalive'
+        self.start()
+
+    def run(self):
+        while True:
+            try:
+                if i.get_state() == irc.session_state.RUNNING:
+                    i.send('TIME')
+
+                    time.sleep(30)
+
+                else:
+                    time.sleep(5)
+
+            except Exception as e:
+                print(f'irc_keepalive::run: exception {e}')
+
+                time.sleep(1)
+
 db = dbi('mauer', 'ghbot', 'ghbot', 'ghbot')
 
 m = mqtt_handler('192.168.64.1', 'GHBot/')
 
 i = irc('192.168.64.1', 6667, 'ghbot', '#test', m, db, '~')
+
+ka = irc_keepalive(i)
+
+print('Go!')
+
+while True:
+    time.sleep(1.)
