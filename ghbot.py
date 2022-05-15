@@ -45,6 +45,7 @@ class irc(threading.Thread):
         self.plugins['delacl']   = ('Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops')
         self.plugins['listacls'] = ('List all ACLs for a user or group', 'sysops')
         self.plugins['forget']   = ('Forget a person; removes all ACLs for that nick', 'sysops')
+        self.plugins['clone']    = ('Clone ACLs from one user to another', 'sysops')
         self.plugins['meet']     = ('Use this when a user (nick) has a new hostname', 'sysops')
         self.plugins['commands'] = ('Show list of known commands', None)
         self.plugins['help']     = ('Help for commands, parameter is the command to get help for', None)
@@ -344,6 +345,24 @@ class irc(threading.Thread):
             self.send_error(f'irc::forget_acls: failed to forget acls for {match_}: {e}')
         
         return False
+
+    def clone_acls(self, from_, to_):
+        cursor = self.db.db.cursor()
+
+        try:
+            cursor.execute('SELECT group_name FROM acl_groups WHERE who=%s', (from_,))
+
+            for row in cursor.fetchall():
+                cursor.execute('INSERT INTO acl_groups(group_name, who) VALUES(%s, %s)', (row, to_))
+
+            self.db.db.commit()
+
+            return None
+
+        except Exception as e:
+            return f'failed to clone acls: {e}'
+        
+        return 'Unexpected situation'
 
     # new_fullname is the new 'nick!user@host'
     def update_acls(self, who, new_fullname):
@@ -723,6 +742,24 @@ class irc(threading.Thread):
 
             else:
                 self.send_error(f'User not specified')
+
+            return self.internal_command_rc.HANDLED
+
+        elif command == 'clone':
+            if len(splitted_args) == 3:
+                from_ = splitted_args[1]
+                to_   = splitted_args[2]
+
+                error = self.clone_acls(from_, to_)
+
+                if error == None:
+                    self.send_ok(f'User {from_} cloned (to {to_})')
+
+                else:
+                    self.send_error(f'Cannot clone {from_} to {to_}: {error}')
+
+            else:
+                self.send_error(f'User "from" and/or "to" not specified')
 
             return self.internal_command_rc.HANDLED
 
