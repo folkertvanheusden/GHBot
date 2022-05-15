@@ -41,8 +41,6 @@ class irc(threading.Thread):
 
         self.plugins     = dict()
 
-        self.hardcoded_plugins = [ 'addacl', 'delacl', 'listacls', 'forget', 'meet', 'commands', 'help', 'more' ]
-
         self.plugins['addacl']   = ('Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops')
         self.plugins['delacl']   = ('Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops')
         self.plugins['listacls'] = ('List all ACLs for a user or group', 'sysops')
@@ -51,6 +49,12 @@ class irc(threading.Thread):
         self.plugins['commands'] = ('Show list of known commands', None)
         self.plugins['help']     = ('Help for commands, parameter is the command to get help for', None)
         self.plugins['more']     = ('Continue outputting a too long line of text', None)
+        self.plugins['define']   = ('Define a replacement for text, see ~alias', None)
+        self.plugins['alias']    = ('Add a different name for a command', None)
+
+        self.hardcoded_plugins = set()
+        for p in self.plugins:
+            self.hardcoded_plugins.add(p)
 
         self.topic_privmsg  = f'to/irc/{channel[1:]}/privmsg'  # Send reply in channel via PRIVMSG
         self.topic_notice   = f'to/irc/{channel[1:]}/notice'   # Send reply in channel via NOTICE
@@ -470,6 +474,23 @@ class irc(threading.Thread):
 
         self.send_ok(f'Known commands: {plugins}')
 
+    def add_define(self, command, is_alias, arguments):
+        self.db.probe()
+
+        cursor = self.db.db.cursor()
+
+        try:
+            cursor.execute('INSERT INTO aliasses(command, is_command, replacement_text) VALUES(%s, %s, %s)', (command.lower(), is_alias, arguments))
+
+            self.db.db.commit()
+
+            return True
+
+        except Exception as e:
+            self.send_error(f'irc::add_define: failed to insert acl ({e})')
+
+        return False
+
     def check_aliasses(self, text, username):
         parts   = text.split(' ')
         command = parts[0]
@@ -658,6 +679,17 @@ class irc(threading.Thread):
             self.list_plugins()
 
             return self.internal_command_rc.HANDLED
+
+        elif command == 'define' or command == 'alias':
+            if len(splitted_args) >= 3:
+                if self.add_define(splitted_args[1], command == 'alias', ' '.join(splitted_args[2:])):
+                    self.send_ok(f'{command} added')
+
+                else:
+                    self.send_error(f'Failed to add {command}')
+
+            else:
+                self.send_error(f'{command} missing arguments')
 
         elif command == 'help':
             if len(splitted_args) == 2:
