@@ -497,7 +497,7 @@ class irc(threading.Thread):
 
         cursor  = self.db.db.cursor()
 
-        cursor.execute('SELECT is_command, replacement_text FROM aliasses WHERE command=%s', (command.lower(), ))
+        cursor.execute('SELECT is_command, replacement_text FROM aliasses WHERE command=%s ORDER BY RAND() LIMIT 1', (command.lower(), ))
 
         row = cursor.fetchone()
 
