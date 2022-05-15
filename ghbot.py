@@ -1,9 +1,9 @@
 #! /usr/bin/python3
 
+from dbi import dbi
 from enum import Enum
 import math
-import MySQLdb
-import paho.mqtt.client as mqtt
+from mqtt_handler import mqtt_handler
 import select
 import socket
 import sys
@@ -941,98 +941,6 @@ class irc(threading.Thread):
                     print(f'irc::run: state {self.state} timeout ({takes} > {irc.state_timeout})')
 
                     self._set_state(self.session_state.DISCONNECTING)
-
-class mqtt_handler(threading.Thread):
-    def __init__(self, broker_ip, topic_prefix):
-        super().__init__()
-
-        self.client = mqtt.Client()
-
-        self.topic_prefix = topic_prefix
-
-        self.topics = []
-
-        self.client.on_connect = self.on_connect
-        self.client.on_message = self.on_message
-
-        self.client.connect(broker_ip, 1883, 60)
-
-        self.name = 'GHBot MQTT'
-        self.start()
-
-    def get_topix_prefix(self):
-        return self.topic_prefix
-
-    def subscribe(self, topic, msg_recv_cb):
-        print(f'mqtt_handler::topic: subscribe to {self.topic_prefix}{topic}')
-
-        self.topics.append((self.topic_prefix + topic, msg_recv_cb))
-
-        self.client.subscribe(self.topic_prefix + topic)
-
-    def publish(self, topic, content):
-        print(f'mqtt_handler::topic: publish "{content}" to "{self.topic_prefix}{topic}"')
-
-        self.client.publish(self.topic_prefix + topic, content)
-
-    def on_connect(self, client, userdata, flags, rc):
-        for topic in self.topics:
-            print(f'mqtt_handler::topic: re-subscribe to {topic[0]}')
-
-            self.client.subscribe(topic[0])
-
-    def on_message(self, client, userdata, msg):
-        print(f'mqtt_handler::topic: received "{msg.payload}" in topic "{msg.topic}"')
-
-        for topic in self.topics:
-            if topic[0] == msg.topic:
-                topic[1](msg.topic, msg.payload.decode('utf-8'))
-
-                return
-
-        print(f'mqtt_handler::topic: no handler for topic "{msg.topic}"')
-
-    def run(self):
-        while True:
-            print('mqtt_handler::run: looping')
-
-            self.client.loop_forever()
-
-class dbi(threading.Thread):
-    def __init__(self, host, user, password, database):
-        super().__init__()
-
-        self.host = host
-        self.user = user
-        self.password = password
-        self.database = database
-
-        self.reconnect()
-
-        self.name = 'GHBot MySQL'
-        self.start()
-
-    def reconnect(self):
-        self.db = MySQLdb.connect(self.host, self.user, self.password, self.database)
-
-    def probe(self):
-        try:
-            cursor = self.db.cursor()
-
-            cursor.execute('SELECT NOW()')
-
-            cursor.fetchone()
-
-        except Exception as e:
-            print(f'MySQL indicated error: {e}')
-
-            self.reconnect()
-
-    def run(self):
-        while True:
-            self.probe()
-
-            time.sleep(29)
 
 class irc_keepalive(threading.Thread):
     def __init__(self, i):
