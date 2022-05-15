@@ -1059,10 +1059,13 @@ class irc_keepalive(threading.Thread):
 
                 time.sleep(1)
 
+# host, user, password, database
 db = dbi('172.29.0.1', 'ghbot', 'ghbot', 'ghbot')
 
+# broker_ip, topic_prefix
 m = mqtt_handler('172.29.0.1', 'GHBot/')
 
+# host, port, nick, channel, m, db, command_prefix
 i = irc('172.29.0.1', 6667, 'ghbot', '#test', m, db, '~')
 
 ka = irc_keepalive(i)
