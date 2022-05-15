@@ -155,6 +155,7 @@ class irc(threading.Thread):
             self.send(f'TOPIC {self.channel} :{msg}')
 
         elif topic == self.topic_register:
+            print(f'{msg}')
             self._register_plugin(msg)
 
         else:
@@ -469,12 +470,44 @@ class irc(threading.Thread):
 
         self.send_ok(f'Known commands: {plugins}')
 
-    def invoke_internal_commands(self, prefix, command, args):
-        splitted_args = None
+    def check_aliasses(self, text, username):
+        parts   = text.split(' ')
+        command = parts[0]
 
-        if len(args) == 2:
-            splitted_args = args[1].split(' ')
+        cursor  = self.db.db.cursor()
 
+        cursor.execute('SELECT is_command, replacement_text FROM aliasses WHERE command=%s', (command.lower(), ))
+
+        row = cursor.fetchone()
+
+        if row == None:
+            return (False, None)
+
+        is_command = row[0]
+        repl_text  = row[1]
+
+        space      = text.find(' ')
+
+        query_text = text[space + 1:] if space != -1 else ''
+
+        if is_command:  # initially only replaces command
+            text = repl_text + ' ' + query_text
+
+        else:
+            text = repl_text
+
+        text = text.replace('%q', query_text)
+
+        exclamation_mark = username.find('!')
+
+        if exclamation_mark != -1:
+            username = username[0:exclamation_mark]
+
+        text = text.replace('%u', username)
+
+        return (is_command, text)
+
+    def invoke_internal_commands(self, prefix, command, splitted_args):
         identifier  = None
 
         target_type = None
@@ -729,21 +762,36 @@ class irc(threading.Thread):
 
         elif command == 'PRIVMSG':
             if len(args) >= 2 and len(args[1]) >= 2:
-                if args[1][0] == self.cmd_prefix:
-                    command = args[1][1:].split(' ')[0]
+                text = args[1]
+
+                if text[0] == self.cmd_prefix:
+                    is_command, new_text = self.check_aliasses(text[1:], prefix)
+
+                    if new_text != None:
+                        if not is_command:
+                            self.send_ok(new_text)
+
+                            return
+
+                        text = self.cmd_prefix + new_text
+
+                if text[0] == self.cmd_prefix:
+                    parts   = text[1:].split(' ')
+
+                    command = parts[0]
 
                     if not command in self.plugins:
                         self.send_error(f'Command "{command}" is not known')
 
                     elif self.check_acls(prefix, command):
                         # returns False when the command is not internal
-                        rc = self.invoke_internal_commands(prefix, command, args)
+                        rc = self.invoke_internal_commands(prefix, command, parts)
 
                         if rc == self.internal_command_rc.HANDLED:
                             pass
 
                         elif rc == self.internal_command_rc.NOT_INTERNAL:
-                            self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/{command}', args[1])
+                            self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/{command}', text)
 
                         elif rc == self.internal_command_rc.ERROR:
                             pass
@@ -979,11 +1027,11 @@ class irc_keepalive(threading.Thread):
 
                 time.sleep(1)
 
-db = dbi('mauer', 'ghbot', 'ghbot', 'ghbot')
+db = dbi('172.29.0.1', 'ghbot', 'ghbot', 'ghbot')
 
-m = mqtt_handler('192.168.64.1', 'GHBot/')
+m = mqtt_handler('172.29.0.1', 'GHBot/')
 
-i = irc('192.168.64.1', 6667, 'ghbot', '#test', m, db, '~')
+i = irc('172.29.0.1', 6667, 'ghbot', '#test', m, db, '~')
 
 ka = irc_keepalive(i)
 
