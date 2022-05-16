@@ -69,8 +69,6 @@ class ghbot(ircbot):
 
         self.users       = dict()
 
-        self.cond_352    = threading.Condition()
-
         self.more        = ''
 
         self.name = 'GHBot IRC'
@@ -653,13 +651,26 @@ class ghbot(ircbot):
                 from_ = splitted_args[1]
                 to_   = splitted_args[2]
 
-                error = self.clone_acls(from_, to_)
+                from_user = from_.split('!')[0] if '!' in from_ else from_
+                to_user   = to_.split('!')[0]   if '!' in to_   else to_
 
-                if error == None:
-                    self.send_ok(f'User {from_} cloned (to {to_})')
+                if not from_user in self.users or self.users[from_user] == '?':
+                    self.invoke_who_and_wait(from_user)
+
+                if not to_user in self.users or self.users[to_user] == '?':
+                    self.invoke_who_and_wait(to_user)
+
+                if from_user in self.users and to_user in self.users and self.users[from_user] != '?' and self.users[to_user] != '?':
+                    error = self.clone_acls(self.users[from_user], self.users[to_user])
+
+                    if error == None:
+                        self.send_ok(f'User {from_} cloned (to {to_})')
+
+                    else:
+                        self.send_error(f'Cannot clone {from_} to {to_}: {error}')
 
                 else:
-                    self.send_error(f'Cannot clone {from_} to {to_}: {error}')
+                    self.send_error(f'Either {from_} or {to_} is unknown')
 
             else:
                 self.send_error(f'User "from" and/or "to" not specified')
