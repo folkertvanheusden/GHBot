@@ -145,9 +145,6 @@ class ircbot(threading.Thread):
         return self.internal_command_rc.NOT_INTERNAL
 
     def handle_irc_commands(self, prefix, command, args):
-        if command != 'PING':
-            print(prefix, '|', command, '|', args)
-
         if len(command) == 3 and command.isnumeric():
             if command == '001':
                 if self.state == self.session_state.USER_WAIT:
@@ -260,9 +257,13 @@ class ircbot(threading.Thread):
         else:
             print(f'irc::run: command "{command}" is not known (for {prefix})')
 
+    def irc_command_insertion_point(self, prefix, command, arguments):
+        return True
+
     def handle_irc_command_thread_wrapper(self, prefix, command, arguments):
         try:
-            self.handle_irc_commands(prefix, command, arguments)
+            if self.irc_command_insertion_point(prefix, command, arguments):
+                self.handle_irc_commands(prefix, command, arguments)
 
         except Exception as e:
             self.send_error(f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}"')

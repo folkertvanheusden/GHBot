@@ -678,6 +678,12 @@ class ghbot(ircbot):
             return self.internal_command_rc.HANDLED
 
         return self.internal_command_rc.NOT_INTERNAL
+    
+    def irc_command_insertion_point(self, prefix, command, arguments):
+        if command in [ 'JOIN', 'PART', 'KICK', 'NICK' ]:
+            self.mqtt.publish(f'from/irc/{self.channel[1:]}/{prefix}/{command}', ' '.join(arguments))
+
+        return True
 
 # host, user, password, database
 db = dbi('172.29.0.1', 'ghbot', 'ghbot', 'ghbot')
