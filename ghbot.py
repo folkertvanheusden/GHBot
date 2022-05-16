@@ -446,6 +446,11 @@ class ghbot(ircbot):
 
         text = text.replace('%u', username)
 
+        if '%m' in text:
+            text = text.strip('%m')
+
+            text = '\001ACTION ' + text.strip() + '\001'
+
         return (is_command, text)
 
     def invoke_internal_commands(self, prefix, command, splitted_args):
