@@ -625,8 +625,8 @@ class ghbot(ircbot):
 
         elif command == 'define' or command == 'alias':
             if len(splitted_args) >= 3:
-                if splitted_args[1] in self.hardcoded_plugins:
-                    self.send_error(f'Cannot override internal command')
+                if splitted_args[1] in self.plugins:
+                    self.send_error(f'Cannot override internal/plugin commands')
 
                 else:
                     rc, nr = self.add_define(splitted_args[1], command == 'alias', ' '.join(splitted_args[2:]))
