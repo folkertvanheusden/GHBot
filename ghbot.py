@@ -40,6 +40,7 @@ class ghbot(ircbot):
         self.plugins['help']     = ('Help for commands, parameter is the command to get help for', None)
         self.plugins['more']     = ('Continue outputting a too long line of text', None)
         self.plugins['define']   = ('Define a replacement for text, see ~alias', None)
+        self.plugins['deldefine']= ('Delete a define (by number)', None)
         self.plugins['alias']    = ('Add a different name for a command', None)
 
         self.hardcoded_plugins = set()
@@ -404,10 +405,27 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
+            return (True, cursor.lastrowid)
+
+        except Exception as e:
+            self.send_error(f'irc::add_define: failed to insert alias ({e})')
+
+        return (False, -1)
+
+    def del_define(self, nr):
+        self.db.probe()
+
+        cursor = self.db.db.cursor()
+
+        try:
+            cursor.execute('DELETE FROM aliasses WHERE nr=%s', (nr,))
+
+            self.db.db.commit()
+
             return True
 
         except Exception as e:
-            self.send_error(f'irc::add_define: failed to insert acl ({e})')
+            self.send_error(f'irc::del_define: failed to delete alias {nr} ({e})')
 
         return False
 
@@ -607,11 +625,28 @@ class ghbot(ircbot):
 
         elif command == 'define' or command == 'alias':
             if len(splitted_args) >= 3:
-                if self.add_define(splitted_args[1], command == 'alias', ' '.join(splitted_args[2:])):
-                    self.send_ok(f'{command} added')
+                rc, nr = self.add_define(splitted_args[1], command == 'alias', ' '.join(splitted_args[2:]))
+
+                if rc == True:
+                    self.send_ok(f'{command} added (number: {nr})')
 
                 else:
                     self.send_error(f'Failed to add {command}')
+
+            else:
+                self.send_error(f'{command} missing arguments')
+
+        elif command == 'deldefine':
+            if len(splitted_args) == 2:
+                nr = splitted_args[1]
+
+                rc = self.del_define(nr)
+
+                if rc == True:
+                    self.send_ok(f'Define {nr} deleted')
+
+                else:
+                    self.send_error(f'Failed to delete {nr}')
 
             else:
                 self.send_error(f'{command} missing arguments')
