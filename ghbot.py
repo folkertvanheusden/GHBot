@@ -385,13 +385,7 @@ class ghbot(ircbot):
                 self.cond_352.wait(5.0 - t_diff)
 
     def list_plugins(self):
-        plugins = ''
-
-        for plugin in self.plugins:
-            if plugins != '':
-                plugins += ', '
-
-            plugins += plugin
+        plugins = ', '.join(sorted(self.plugins))
 
         self.send_ok(f'Known commands: {plugins}')
 
