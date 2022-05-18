@@ -271,7 +271,7 @@ class ircbot(threading.Thread):
                 self.handle_irc_commands(prefix, command, arguments)
 
         except Exception as e:
-            self.send_error(f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}"')
+            self.send_error(f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}" at line number: {e.__traceback__.tb_lineno}')
 
             traceback.print_exc(file=sys.stdout)
 

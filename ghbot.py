@@ -45,6 +45,8 @@ class ghbot(ircbot):
         self.plugins['define']   = ['Define a replacement for text, see ~alias', None, now]
         self.plugins['deldefine']= ['Delete a define (by number)', None, now]
         self.plugins['alias']    = ['Add a different name for a command', None, now]
+        self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now]
+        self.plugins['showgroup']= ['Shows a list of commands in a group', 'sysops', now]
 
         self.hardcoded_plugins = set()
         for p in self.plugins:
@@ -775,6 +777,66 @@ class ghbot(ircbot):
 
             else:
                 self.send_error(f'User "from" and/or "to" not specified')
+
+            return self.internal_command_rc.HANDLED
+
+        elif command == 'listgroups':
+            try:
+                cursor = self.db.db.cursor()
+
+                cursor.execute('SELECT DISTINCT who FROM acls')
+
+                groups = set()
+
+                # defined by sysop(s)
+                for row in cursor.fetchall():
+                    groups.add(row[0])
+
+                cursor.close()
+
+                # defined by plugins
+                for plugin in self.plugins:
+                    group = self.plugins[plugin][1]
+
+                    if group != None:
+                        groups.add(group)
+
+                groups_str = ', '.join(groups) if len(groups) > 1 else '(none)'
+
+                self.send_ok(f'Defined groups: {groups_str}')
+
+            except Exception as e:
+                self.send_error(f'listgroups: exception "{e}" at line number: {e.__traceback__.tb_lineno}')
+
+            return self.internal_command_rc.HANDLED
+
+        elif command == 'showgroup':
+            if len(splitted_args) == 2:
+                group = splitted_args[1]
+
+                cursor = self.db.db.cursor()
+
+                cursor.execute('SELECT command FROM acls WHERE who=%s', (group,))
+
+                commands = set()
+
+                # defined by sysop(s)
+                for row in cursor.fetchall():
+                    commands.add(row[0])
+
+                # defined by plugins
+                for plugin in self.plugins:
+                    if self.plugins[plugin][1] == group:
+                        commands.add(plugin)
+
+                cursor.close()
+
+                commands_str = ', '.join(commands)
+
+                self.send_ok(f'Commands in group {group}: {commands_str}')
+
+            else:
+                self.send_error('Please select a group to show')
 
             return self.internal_command_rc.HANDLED
 
