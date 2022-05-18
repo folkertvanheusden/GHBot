@@ -29,19 +29,24 @@ class ghbot(ircbot):
         self.mqtt        = m
 
         self.plugins     = dict()
+        self.plugins_lock= threading.Lock()
 
-        self.plugins['addacl']   = ('Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops')
-        self.plugins['delacl']   = ('Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops')
-        self.plugins['listacls'] = ('List all ACLs for a user or group', 'sysops')
-        self.plugins['forget']   = ('Forget a person; removes all ACLs for that nick', 'sysops')
-        self.plugins['clone']    = ('Clone ACLs from one user to another', 'sysops')
-        self.plugins['meet']     = ('Use this when a user (nick) has a new hostname', 'sysops')
-        self.plugins['commands'] = ('Show list of known commands', None)
-        self.plugins['help']     = ('Help for commands, parameter is the command to get help for', None)
-        self.plugins['more']     = ('Continue outputting a too long line of text', None)
-        self.plugins['define']   = ('Define a replacement for text, see ~alias', None)
-        self.plugins['deldefine']= ('Delete a define (by number)', None)
-        self.plugins['alias']    = ('Add a different name for a command', None)
+        now              = time.time()
+
+        self.plugins['addacl']   = ['Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops', now]
+        self.plugins['delacl']   = ['Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops', now]
+        self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now]
+        self.plugins['forget']   = ['Forget a person; removes all ACLs for that nick', 'sysops', now]
+        self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now]
+        self.plugins['meet']     = ['Use this when a user (nick) has a new hostname', 'sysops', now]
+        self.plugins['commands'] = ['Show list of known commands', None, now]
+        self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now]
+        self.plugins['more']     = ['Continue outputting a too long line of text', None, now]
+        self.plugins['define']   = ['Define a replacement for text, see ~alias', None, now]
+        self.plugins['deldefine']= ['Delete a define (by number)', None, now]
+        self.plugins['alias']    = ['Add a different name for a command', None, now]
+        self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now]
+        self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now]
 
         self.hardcoded_plugins = set()
         for p in self.plugins:
@@ -75,14 +80,44 @@ class ghbot(ircbot):
         self.name = 'GHBot IRC'
         self.start()
 
+        self.plugin_cleaner = threading.Thread(target=self._plugin_cleaner)
+        self.plugin_cleaner.start()
+
         # ask plugins to register themselves so that we know which
         # commands are available (and what they're for etc.)
         self._plugin_command('register')
+
+    # checks how old the the latest registration of a plugin is.
+    # too old? then forget the plugin-command.
+    def _plugin_cleaner(self):
+        while True:
+            try:
+                time.sleep(4.9)
+
+                to_delete = []
+
+                now       = time.time()
+
+                self.plugins_lock.acquire()
+
+                for plugin in self.plugins:
+                    if now - self.plugins[plugin][2] >= 5. and plugin not in self.hardcoded_plugins:  # 5 seconds timeout
+                        to_delete.append(plugin)
+
+                for plugin in to_delete:
+                    del self.plugins[plugin]
+
+                self.plugins_lock.release()
+
+            except Exception as e:
+                print(f'_plugin_cleaner: failed to clean: {e}')
 
     def _plugin_command(self, cmd):
         self.mqtt.publish('from/bot/command', cmd)
 
     def _register_plugin(self, msg):
+        self.plugins_lock.acquire()
+
         try:
             elements = msg.split('|')
 
@@ -107,7 +142,7 @@ class ghbot(ircbot):
                     if not cmd in self.plugins:
                         print(f'_register_plugin: first announcement of {cmd}')
 
-                    self.plugins[cmd] = (descr, acl_group)
+                    self.plugins[cmd] = [descr, acl_group, time.time()]
 
                 else:
                     print(f'_register_plugin: cannot override "hardcoded" plugin ({cmd})')
@@ -116,10 +151,12 @@ class ghbot(ircbot):
                 print(f'_register_plugin: cmd missing in plugin registration')
 
         except Exception as e:
-            print(f'_register_plugin: problem while processing plugin registration "{msg}"')
+            print(f'_register_plugin: problem while processing plugin registration "{msg}": {e}')
+
+        self.plugins_lock.release()
 
     def _recv_msg_cb(self, topic, msg):
-        print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
+        # print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
 
         topic = topic[len(self.mqtt.get_topix_prefix()):]
 
@@ -138,7 +175,7 @@ class ghbot(ircbot):
             self.send(f'TOPIC {self.channel} :{msg}')
 
         elif topic == self.topic_register:
-            print(f'{msg}')
+            # print(f'{msg}')
             self._register_plugin(msg)
 
         else:
@@ -147,9 +184,17 @@ class ghbot(ircbot):
             return
 
     def check_acls(self, who, command):
+        self.plugins_lock.acquire()
+
         # "no group" is for everyone
         if command in self.plugins and self.plugins[command][1] == None:
+            self.plugins_lock.release()
+
             return True
+
+        plugin_group = self.plugins[command][1]
+
+        self.plugins_lock.release()
 
         self.db.probe()  # to prevent those pesky "sever has gone away" problems
 
@@ -172,7 +217,7 @@ class ghbot(ircbot):
             return True
 
         # check if user is in group as specified by plugin
-        cursor.execute('SELECT COUNT(*) FROM acl_groups WHERE group_name=%s AND who=%s', (self.plugins[command][1], who))
+        cursor.execute('SELECT COUNT(*) FROM acl_groups WHERE group_name=%s AND who=%s', (plugin_group, who))
 
         row = cursor.fetchone()
 
@@ -385,7 +430,11 @@ class ghbot(ircbot):
                 self.cond_352.wait(5.0 - t_diff)
 
     def list_plugins(self):
+        self.plugins_lock.acquire()
+
         plugins = ', '.join(sorted(self.plugins))
+
+        self.plugins_lock.release()
 
         self.send_ok(f'Known commands: {plugins}')
 
@@ -519,7 +568,13 @@ class ghbot(ircbot):
             elif cmd_idx != None:
                 cmd_name = splitted_args[cmd_idx + 1]
 
-                if cmd_name in self.plugins:
+                self.plugins_lock.acquire()
+
+                plugin_known = cmd_name in self.plugins
+
+                self.plugins_lock.release()
+
+                if plugin_known:
                     if self.add_acl(identifier, cmd_name):  # who, command
                         self.send_ok(f'ACL added for user {identifier} for command {cmd_name}')
 
@@ -619,7 +674,13 @@ class ghbot(ircbot):
 
         elif command == 'define' or command == 'alias':
             if len(splitted_args) >= 3:
-                if splitted_args[1] in self.plugins:
+                self.plugins_lock.acquire()
+
+                plugin_known = splitted_args[1] in self.plugins
+
+                self.plugins_lock.release()
+
+                if plugin_known:
                     self.send_error(f'Cannot override internal/plugin commands')
 
                 else:
@@ -653,11 +714,15 @@ class ghbot(ircbot):
             if len(splitted_args) == 2:
                 cmd = splitted_args[1]
 
+                self.plugins_lock.acquire()
+
                 if cmd in self.plugins:
                     self.send_ok(f'Command {cmd}: {self.plugins[cmd][0]} (group: {self.plugins[cmd][1]})')
 
                 else:
                     self.send_error(f'Command/plugin not known')
+
+                self.plugins_lock.release()
 
             else:
                 self.list_plugins()
@@ -715,6 +780,95 @@ class ghbot(ircbot):
 
             return self.internal_command_rc.HANDLED
 
+        elif command == 'listgroups':
+            try:
+                cursor = self.db.db.cursor()
+
+                cursor.execute('SELECT DISTINCT who FROM acls')
+
+                groups = set()
+
+                # defined by sysop(s)
+                for row in cursor.fetchall():
+                    groups.add(row[0])
+
+                cursor.close()
+
+                # defined by plugins
+                self.plugins_lock.acquire()
+
+                for plugin in self.plugins:
+                    group = self.plugins[plugin][1]
+
+                    if group != None:
+                        groups.add(group)
+
+                self.plugins_lock.release()
+
+                groups_str = ', '.join(groups) if len(groups) > 1 else '(none)'
+
+                self.send_ok(f'Defined groups: {groups_str}')
+
+            except Exception as e:
+                self.send_error(f'listgroups: exception "{e}" at line number: {e.__traceback__.tb_lineno}')
+
+            return self.internal_command_rc.HANDLED
+
+        elif command == 'showgroup':
+            if len(splitted_args) == 3:
+                which = splitted_args[1]
+                group = splitted_args[2]
+
+                cursor = self.db.db.cursor()
+
+                if which.lower() == 'commands':
+                    cursor.execute('SELECT command FROM acls WHERE who=%s', (group,))
+
+                    commands = set()
+
+                    # defined by sysop(s)
+                    for row in cursor.fetchall():
+                        commands.add(row[0])
+
+                    # defined by plugins
+                    self.plugins_lock.acquire()
+
+                    for plugin in self.plugins:
+                        if self.plugins[plugin][1] == group:
+                            commands.add(plugin)
+
+                    self.plugins_lock.release()
+
+                    cursor.close()
+
+                    commands_str = ', '.join(commands)
+
+                    self.send_ok(f'Commands in group {group}: {commands_str}')
+
+                elif which.lower() == 'members':
+                    cursor.execute('SELECT who FROM acl_groups WHERE group_name=%s', (group,))
+
+                    members = set()
+
+                    for row in cursor.fetchall():
+                        member = row[0]
+
+                        if '!' in member:
+                            member = member[0:member.find('!')]
+
+                        members.add(member)
+
+                    cursor.close()
+
+                    members_str = ', '.join(members)
+
+                    self.send_ok(f'Members in group {group}: {members_str}')
+
+            else:
+                self.send_error('Command is: showgroup members|commands <groupname>')
+
+            return self.internal_command_rc.HANDLED
+
         return self.internal_command_rc.NOT_INTERNAL
     
     def irc_command_insertion_point(self, prefix, command, arguments):
@@ -724,13 +878,13 @@ class ghbot(ircbot):
         return True
 
 # host, user, password, database
-db = dbi('172.29.0.1', 'ghbot', 'ghbot', 'ghbot')
+db = dbi('localhost', 'ghbot', 'yourmum', 'ghbot')
 
 # broker_ip, topic_prefix
-m = mqtt_handler('172.29.0.1', 'GHBot/')
+m = mqtt_handler('mqtt.vm.nurd.space', 'GHBot/')
 
 # host, port, nick, channel, m, db, command_prefix
-i = ghbot('172.29.0.1', 6667, 'ghbot', '#test', m, db, '~')
+i = ghbot('irc.oftc.net', 6667, 'ghbot', '#nurdbottest', m, db, '~')
 
 ka = irc_keepalive(i)
 

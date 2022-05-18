@@ -88,10 +88,15 @@ class ircbot(threading.Thread):
             self.send(f'PRIVMSG {self.channel} :No more ~more')
 
         else:
-            current_more = self.more[0:200]
+            space = self.more.find(' ', 190, 200)
 
-            if len(self.more) > 200:
-                self.more = self.more[200:]
+            if space == -1:
+                space = 200
+
+            current_more = self.more[0:space].strip()
+
+            if len(self.more) > space:
+                self.more = self.more[space:].strip()
 
             else:
                 self.more = ''
@@ -266,7 +271,7 @@ class ircbot(threading.Thread):
                 self.handle_irc_commands(prefix, command, arguments)
 
         except Exception as e:
-            self.send_error(f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}"')
+            self.send_error(f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}" at line number: {e.__traceback__.tb_lineno}')
 
             traceback.print_exc(file=sys.stdout)
 
