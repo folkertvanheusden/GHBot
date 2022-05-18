@@ -795,11 +795,15 @@ class ghbot(ircbot):
                 cursor.close()
 
                 # defined by plugins
+                self.plugins_lock.acquire()
+
                 for plugin in self.plugins:
                     group = self.plugins[plugin][1]
 
                     if group != None:
                         groups.add(group)
+
+                self.plugins_lock.release()
 
                 groups_str = ', '.join(groups) if len(groups) > 1 else '(none)'
 
@@ -825,9 +829,13 @@ class ghbot(ircbot):
                     commands.add(row[0])
 
                 # defined by plugins
+                self.plugins_lock.acquire()
+
                 for plugin in self.plugins:
                     if self.plugins[plugin][1] == group:
                         commands.add(plugin)
+
+                self.plugins_lock.release()
 
                 cursor.close()
 
