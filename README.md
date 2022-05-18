@@ -10,5 +10,7 @@ ghbot.sql contains the database schema.
 
 ghbot.py is the main program.
 
+You may want to install python3-mysqldb and python3-paho-mqtt
+
 
 (c) 2022 by Folkert van Heusden <mail@vanheusden.com>
