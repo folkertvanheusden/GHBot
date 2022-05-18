@@ -46,7 +46,7 @@ class ghbot(ircbot):
         self.plugins['deldefine']= ['Delete a define (by number)', None, now]
         self.plugins['alias']    = ['Add a different name for a command', None, now]
         self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now]
-        self.plugins['showgroup']= ['Shows a list of commands in a group', 'sysops', now]
+        self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now]
 
         self.hardcoded_plugins = set()
         for p in self.plugins:
@@ -815,36 +815,57 @@ class ghbot(ircbot):
             return self.internal_command_rc.HANDLED
 
         elif command == 'showgroup':
-            if len(splitted_args) == 2:
-                group = splitted_args[1]
+            if len(splitted_args) == 3:
+                which = splitted_args[1]
+                group = splitted_args[2]
 
                 cursor = self.db.db.cursor()
 
-                cursor.execute('SELECT command FROM acls WHERE who=%s', (group,))
+                if which.lower() == 'commands':
+                    cursor.execute('SELECT command FROM acls WHERE who=%s', (group,))
 
-                commands = set()
+                    commands = set()
 
-                # defined by sysop(s)
-                for row in cursor.fetchall():
-                    commands.add(row[0])
+                    # defined by sysop(s)
+                    for row in cursor.fetchall():
+                        commands.add(row[0])
 
-                # defined by plugins
-                self.plugins_lock.acquire()
+                    # defined by plugins
+                    self.plugins_lock.acquire()
 
-                for plugin in self.plugins:
-                    if self.plugins[plugin][1] == group:
-                        commands.add(plugin)
+                    for plugin in self.plugins:
+                        if self.plugins[plugin][1] == group:
+                            commands.add(plugin)
 
-                self.plugins_lock.release()
+                    self.plugins_lock.release()
 
-                cursor.close()
+                    cursor.close()
 
-                commands_str = ', '.join(commands)
+                    commands_str = ', '.join(commands)
 
-                self.send_ok(f'Commands in group {group}: {commands_str}')
+                    self.send_ok(f'Commands in group {group}: {commands_str}')
+
+                elif which.lower() == 'members':
+                    cursor.execute('SELECT who FROM acl_groups WHERE group_name=%s', (group,))
+
+                    members = set()
+
+                    for row in cursor.fetchall():
+                        member = row[0]
+
+                        if '!' in member:
+                            member = member[0:member.find('!')]
+
+                        members.add(member)
+
+                    cursor.close()
+
+                    members_str = ', '.join(members)
+
+                    self.send_ok(f'Members in group {group}: {members_str}')
 
             else:
-                self.send_error('Please select a group to show')
+                self.send_error('Command is: showgroup members|commands <groupname>')
 
             return self.internal_command_rc.HANDLED
 
