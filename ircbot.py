@@ -88,10 +88,15 @@ class ircbot(threading.Thread):
             self.send(f'PRIVMSG {self.channel} :No more ~more')
 
         else:
-            current_more = self.more[0:200]
+            space = self.more.find(' ', 190, 200)
 
-            if len(self.more) > 200:
-                self.more = self.more[200:]
+            if space == -1:
+                space = 200
+
+            current_more = self.more[0:space].strip()
+
+            if len(self.more) > space:
+                self.more = self.more[space:].strip()
 
             else:
                 self.more = ''
