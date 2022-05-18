@@ -16,5 +16,7 @@ CREATE TABLE `aliasses` (
   `command` varchar(256) NOT NULL,
   `is_command` tinyint(1) DEFAULT 0,
   `replacement_text` varchar(256) NOT NULL,
+  `nr` int(12) NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (`nr`),
   KEY `command` (`command`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
