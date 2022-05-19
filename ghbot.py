@@ -101,7 +101,7 @@ class ghbot(ircbot):
                 self.plugins_lock.acquire()
 
                 for plugin in self.plugins:
-                    if now - self.plugins[plugin][2] >= 5. and plugin not in self.hardcoded_plugins:  # 5 seconds timeout
+                    if now - self.plugins[plugin][2] >= 10. and plugin not in self.hardcoded_plugins:  # 5 seconds timeout
                         to_delete.append(plugin)
 
                 for plugin in to_delete:
@@ -166,7 +166,8 @@ class ghbot(ircbot):
             return
 
         if topic == self.topic_privmsg:
-            self.send(f'PRIVMSG {self.channel} :{msg}')
+            # ignoring channel currently
+            self.send_ok(msg)
 
         elif topic == self.topic_notice:
             self.send(f'NOTICE {self.channel} :{msg}')
@@ -465,7 +466,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return True
+            if cursor.rowcount == 1:
+                return True
+
+            self.send_error(f'irc::del_define: unexpected affected rows count {cursor.rowcount}')
 
         except Exception as e:
             self.send_error(f'irc::del_define: failed to delete alias {nr} ({e})')
@@ -697,15 +701,19 @@ class ghbot(ircbot):
 
         elif command == 'deldefine':
             if len(splitted_args) == 2:
-                nr = splitted_args[1]
+                try:
+                    nr = int(splitted_args[1])
 
-                rc = self.del_define(nr)
+                    rc = self.del_define(nr)
 
-                if rc == True:
-                    self.send_ok(f'Define {nr} deleted')
+                    if rc == True:
+                        self.send_ok(f'Define {nr} deleted')
 
-                else:
-                    self.send_error(f'Failed to delete {nr}')
+                    else:
+                        self.send_error(f'Failed to delete {nr}')
+
+                except ValueError as ve:
+                    self.send_error(f'Parameter {splitted_args[1]} is not a number')
 
             else:
                 self.send_error(f'{command} missing arguments')
