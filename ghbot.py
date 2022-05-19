@@ -466,7 +466,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return True
+            if cursor.rowcount == 1:
+                return True
+
+            self.send_error(f'irc::del_define: unexpected affected rows count {cursor.rowcount}')
 
         except Exception as e:
             self.send_error(f'irc::del_define: failed to delete alias {nr} ({e})')
