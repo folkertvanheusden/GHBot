@@ -171,11 +171,11 @@ class ircbot(threading.Thread):
                     self._set_state(self.session_state.DISCONNECTING)
 
             elif command == '352':  # reponse to 'WHO'
-                self.users[args[5]] = f'{args[5]}!{args[2]}@{args[3]}'
+                self.users[args[5].lower()] = f'{args[5]}!{args[2]}@{args[3]}'
 
             elif command == '353':  # users in the channel
                 for user in args[3].split(' '):
-                    self.users[user] = '?'
+                    self.users[user.lower()] = '?'
 
             # 315 is 'end of who'
             if command == '352' or command == '315':
@@ -197,14 +197,19 @@ class ircbot(threading.Thread):
                 if all_joined:
                     self._set_state(self.session_state.RUNNING)
 
-            self.users[prefix.split('!')[0]] = prefix.lower()
+            self.users[prefix.split('!')[0].lower()] = prefix.lower()
 
         elif command == 'PART' or command == 'QUIT':
-            print(prefix)
-            del self.users[prefix.split('!')[0]]
+            nick = prefix.split('!')[0].lower()
+
+            if nick in self.users:
+                del self.users[nick]
 
         elif command == 'KICK':
-            del self.users[args[1]]
+            nick = args[1].lower()
+
+            if nick in self.users:
+                del self.users[nick]
 
         elif command == 'NICK':
             try:
@@ -217,7 +222,7 @@ class ircbot(threading.Thread):
                 if old_user in self.users:
                     del self.users[old_user]
             
-                new_user     = args[0]
+                new_user     = args[0].lower()
 
                 new_prefix   = new_user + old_lower_prefix[excl_mark:]
 
