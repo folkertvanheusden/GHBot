@@ -44,7 +44,7 @@ class mqtt_handler(threading.Thread):
             self.client.subscribe(topic[0])
 
     def on_message(self, client, userdata, msg):
-        print(f'mqtt_handler::topic: received "{msg.payload}" in topic "{msg.topic}"')
+        # print(f'mqtt_handler::topic: received "{msg.payload}" in topic "{msg.topic}"')
 
         for topic in self.topics:
             if topic[0] == msg.topic:

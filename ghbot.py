@@ -20,8 +20,8 @@ class ghbot(ircbot):
         ERROR        = 0x10
         NOT_INTERNAL = 0xff
 
-    def __init__(self, host, port, nick, channel, m, db, cmd_prefix):
-        super().__init__(host, port, nick, channel)
+    def __init__(self, host, port, nick, channels, m, db, cmd_prefix):
+        super().__init__(host, port, nick, channels)
 
         self.cmd_prefix  = cmd_prefix
 
@@ -53,15 +53,26 @@ class ghbot(ircbot):
         for p in self.plugins:
             self.hardcoded_plugins.add(p)
 
-        self.topic_privmsg  = f'to/irc/{channel[1:]}/privmsg'  # Send reply in channel via PRIVMSG
-        self.topic_notice   = f'to/irc/{channel[1:]}/notice'   # Send reply in channel via NOTICE
-        self.topic_topic    = f'to/irc/{channel[1:]}/topic'    # Sets TOPIC for channel
+        self.topic_privmsg = []
+        self.topic_notice  = []
+        self.topic_topic   = []
+
+        for channel in self.channels:
+            self.topic_privmsg.append(f'to/irc/{channel[1:]}/privmsg')  # Send reply in channel via PRIVMSG
+            self.topic_notice.append(f'to/irc/{channel[1:]}/notice')   # Send reply in channel via NOTICE
+            self.topic_topic.append(f'to/irc/{channel[1:]}/topic')    # Sets TOPIC for channel
 
         self.topic_register = f'to/bot/register'  # topic where plugins announce themselves
 
-        self.mqtt.subscribe(self.topic_privmsg,  self._recv_msg_cb)
-        self.mqtt.subscribe(self.topic_notice,   self._recv_msg_cb)
-        self.mqtt.subscribe(self.topic_topic,    self._recv_msg_cb)
+        for topic in self.topic_privmsg:
+            self.mqtt.subscribe(topic, self._recv_msg_cb)
+
+        for topic in self.topic_notice:
+            self.mqtt.subscribe(topic, self._recv_msg_cb)
+
+        for topic in self.topic_topic:
+            self.mqtt.subscribe(topic, self._recv_msg_cb)
+
         self.mqtt.subscribe(self.topic_register, self._recv_msg_cb)
 
         self.host        = host
@@ -75,8 +86,6 @@ class ghbot(ircbot):
         self.state_since = time.time()
 
         self.users       = dict()
-
-        self.more        = ''
 
         self.name = 'GHBot IRC'
         self.start()
@@ -157,33 +166,37 @@ class ghbot(ircbot):
         self.plugins_lock.release()
 
     def _recv_msg_cb(self, topic, msg):
-        # print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
+        try:
+            print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
 
-        topic = topic[len(self.mqtt.get_topix_prefix()):]
+            topic = topic[len(self.mqtt.get_topix_prefix()):]
 
-        if msg.find('\n') != -1 or msg.find('\r') != -1:
-            print(f'irc::_recv_msg_cb: invalid content to send for {topic}')
+            parts = topic.split('/')
 
-            return
+            if msg.find('\n') != -1 or msg.find('\r') != -1:
+                print(f'irc::_recv_msg_cb: invalid content to send for {topic}')
 
-        if topic == self.topic_privmsg:
-            # ignoring channel currently
-            self.send_ok(msg)
+                return
 
-        elif topic == self.topic_notice:
-            self.send(f'NOTICE {self.channel} :{msg}')
+            if topic in self.topic_privmsg:
+                self.send_ok('#' + parts[2], msg)
 
-        elif topic == self.topic_topic:
-            self.send(f'TOPIC {self.channel} :{msg}')
+            elif topic in self.topic_notice:
+                self.send(f'NOTICE #{parts[2]} :{msg}')
 
-        elif topic == self.topic_register:
-            # print(f'{msg}')
-            self._register_plugin(msg)
+            elif topic in self.topic_topic:
+                self.send(f'TOPIC #{parts[2]} :{msg}')
 
-        else:
-            print(f'irc::_recv_msg_cb: invalid topic {topic}')
+            elif topic in self.topic_register:
+                self._register_plugin(msg)
 
-            return
+            else:
+                print(f'irc::_recv_msg_cb: invalid topic {topic}')
+
+                return
+
+        except Exception as e:
+            print(f'irc::_recv_msg_cb: exception {e} while processing {topic}|{msg}')
 
     def check_acls(self, who, command):
         self.plugins_lock.acquire()
@@ -255,7 +268,7 @@ class ghbot(ircbot):
             return True
 
         except Exception as e:
-            self.send_error(f'irc::add_acl: failed to insert acl ({e})')
+            self.send_error(self.error_ch, f'irc::add_acl: failed to insert acl ({e})')
 
         return False
 
@@ -272,7 +285,7 @@ class ghbot(ircbot):
             return True
 
         except Exception as e:
-            self.send_error(f'irc::del_acl: failed to delete acl ({e})')
+            self.send_error(self.error_ch, f'irc::del_acl: failed to delete acl ({e})')
         
         return False
 
@@ -291,7 +304,7 @@ class ghbot(ircbot):
             return True
 
         except Exception as e:
-            self.send_error(f'irc::forget_acls: failed to forget acls for {match_}: {e}')
+            self.send_error(self.error_ch, f'irc::forget_acls: failed to forget acls for {match_}: {e}')
         
         return False
 
@@ -331,7 +344,7 @@ class ghbot(ircbot):
             return True
 
         except Exception as e:
-            self.send_error(f'irc::update_acls: failed to update acls ({e})')
+            self.send_error(self.error_ch, f'irc::update_acls: failed to update acls ({e})')
         
         return False
 
@@ -348,7 +361,7 @@ class ghbot(ircbot):
             return True
 
         except Exception as e:
-            self.send_error(f'irc::group_add: failed to insert group-member ({e})')
+            self.send_error(self.error_ch, f'irc::group_add: failed to insert group-member ({e})')
 
         return False
 
@@ -365,7 +378,7 @@ class ghbot(ircbot):
             return True
 
         except Exception as e:
-            self.send_error(f'irc::group-del: failed to delete group-member ({e})')
+            self.send_error(self.error_ch, f'irc::group-del: failed to delete group-member ({e})')
 
         return False
 
@@ -399,7 +412,7 @@ class ghbot(ircbot):
                 return True
 
         except Exception as e:
-            self.send_error(f'irc::is_group: failed to query database for group {group} ({e})')
+            self.send_error(self.error_ch, f'irc::is_group: failed to query database for group {group} ({e})')
 
         return False
 
@@ -438,7 +451,7 @@ class ghbot(ircbot):
 
         self.plugins_lock.release()
 
-        self.send_ok(f'Known commands: {plugins}')
+        return plugins
 
     def add_define(self, command, is_alias, arguments):
         self.db.probe()
@@ -453,7 +466,7 @@ class ghbot(ircbot):
             return (True, cursor.lastrowid)
 
         except Exception as e:
-            self.send_error(f'irc::add_define: failed to insert alias ({e})')
+            self.send_error(self.error_ch, f'irc::add_define: failed to insert alias ({e})')
 
         return (False, -1)
 
@@ -470,10 +483,10 @@ class ghbot(ircbot):
             if cursor.rowcount == 1:
                 return True
 
-            self.send_error(f'irc::del_define: unexpected affected rows count {cursor.rowcount}')
+            self.send_error(self.error_ch, f'irc::del_define: unexpected affected rows count {cursor.rowcount}')
 
         except Exception as e:
-            self.send_error(f'irc::del_define: failed to delete alias {nr} ({e})')
+            self.send_error(self.error_ch, f'irc::del_define: failed to delete alias {nr} ({e})')
 
         return False
 
@@ -519,23 +532,25 @@ class ghbot(ircbot):
 
         return (is_command, text)
 
-    def invoke_internal_commands(self, prefix, command, splitted_args):
+    def invoke_internal_commands(self, prefix, command, splitted_args, channel):
         identifier  = None
 
         target_type = None
 
         check_user  = '(not given)'
 
+        print('GREP', channel, command, prefix, splitted_args)
+
         if splitted_args != None and len(splitted_args) >= 2:
             if len(splitted_args) >= 3:  # addacl
                 target_type = splitted_args[1]
 
-                check_user = splitted_args[2]
+                check_user  = splitted_args[2]
 
             else:
                 target_type = None
 
-                check_user = splitted_args[1]
+                check_user  = splitted_args[1]
 
             if check_user in self.users:
                 identifier = self.users[check_user]
@@ -563,7 +578,7 @@ class ghbot(ircbot):
                 group_name = splitted_args[group_idx + 1]
 
                 if self.group_add(identifier, group_name):  # who, group
-                    self.send_ok(f'User {identifier} added to group {group_name}')
+                    self.send_ok(channel, f'User {identifier} added to group {group_name}')
 
                     return self.internal_command_rc.HANDLED
 
@@ -581,20 +596,22 @@ class ghbot(ircbot):
 
                 if plugin_known:
                     if self.add_acl(identifier, cmd_name):  # who, command
-                        self.send_ok(f'ACL added for user {identifier} for command {cmd_name}')
+                        self.send_ok(channel, f'ACL added for user {identifier} for command {cmd_name}')
 
                         return self.internal_command_rc.HANDLED
 
                     else:
+                        self.send_error(channel, 'Failed to add ACL - did it exist already?')
+
                         return self.internal_command_rc.ERROR
 
                 else:
-                    self.send_error(f'ACL added for user {identifier} for command {cmd_name} NOT added: command/plugin not known')
+                    self.send_error(channel, f'ACL added for user {identifier} for command {cmd_name} NOT added: command/plugin not known')
 
                     return self.internal_command_rc.HANDLED
 
             else:
-                self.send_error(f'Usage: addacl user|group <user|group> group|cmd <group-name|cmd-name>')
+                self.send_error(channel, f'Usage: addacl user|group <user|group> group|cmd <group-name|cmd-name>')
 
                 return self.internal_command_rc.ERROR
 
@@ -613,7 +630,7 @@ class ghbot(ircbot):
                 group_name = splitted_args[group_idx + 1]
 
                 if self.group_del(identifier, group_name):  # who, group
-                    self.send_ok(f'User {identifier} removed from group {group_name}')
+                    self.send_ok(channel, f'User {identifier} removed from group {group_name}')
 
                     return self.internal_command_rc.HANDLED
 
@@ -624,7 +641,7 @@ class ghbot(ircbot):
                 cmd_name = splitted_args[cmd_idx + 1]
 
                 if self.del_acl(identifier, cmd_name):  # who, command
-                    self.send_ok(f'ACL removed for user {identifier} for command {cmd_name}')
+                    self.send_ok(channel, f'ACL removed for user {identifier} for command {cmd_name}')
 
                     return self.internal_command_rc.HANDLED
 
@@ -632,7 +649,7 @@ class ghbot(ircbot):
                     return self.internal_command_rc.ERROR
 
             else:
-                self.send_error(f'Usage: delacl <user> group|cmd <group-name|cmd-name>')
+                self.send_error(channel, f'Usage: delacl <user> group|cmd <group-name|cmd-name>')
 
                 return self.internal_command_rc.ERROR
 
@@ -648,10 +665,10 @@ class ghbot(ircbot):
 
                 str_acls = ', '.join(acls)
 
-                self.send_ok(f'ACLs for user {identifier}: "{str_acls}"')
+                self.send_ok(channel, f'ACLs for user {identifier}: "{str_acls}"')
 
             else:
-                self.send_error('Please provide a nick')
+                self.send_error(channel, 'Please provide a nick')
 
             return self.internal_command_rc.HANDLED
 
@@ -664,16 +681,18 @@ class ghbot(ircbot):
                 if user_to_update in self.users:
                     self.update_acls(user_to_update, self.users[user_to_update])
 
-                    self.send_ok(f'User {user_to_update} updated to {self.users[user_to_update]}')
+                    self.send_ok(channel, f'User {user_to_update} updated to {self.users[user_to_update]}')
 
                 else:
-                    self.send_error(f'User {user_to_update} is not known')
+                    self.send_error(channel, f'User {user_to_update} is not known')
 
             else:
-                self.send_error(f'Meet parameter missing ({splitted_args} given)')
+                self.send_error(channel, f'Meet parameter missing ({splitted_args} given)')
 
         elif command == 'commands':
-            self.list_plugins()
+            plugins = self.list_plugins()
+
+            self.send_ok(channel, f'Known commands: {plugins}')
 
             return self.internal_command_rc.HANDLED
 
@@ -686,19 +705,19 @@ class ghbot(ircbot):
                 self.plugins_lock.release()
 
                 if plugin_known:
-                    self.send_error(f'Cannot override internal/plugin commands')
+                    self.send_error(channel, f'Cannot override internal/plugin commands')
 
                 else:
                     rc, nr = self.add_define(splitted_args[1], command == 'alias', ' '.join(splitted_args[2:]))
 
                     if rc == True:
-                        self.send_ok(f'{command} added (number: {nr})')
+                        self.send_ok(channel, f'{command} added (number: {nr})')
 
                     else:
-                        self.send_error(f'Failed to add {command}')
+                        self.send_error(channel, f'Failed to add {command}')
 
             else:
-                self.send_error(f'{command} missing arguments')
+                self.send_error(channel, f'{command} missing arguments')
 
         elif command == 'deldefine':
             if len(splitted_args) == 2:
@@ -708,16 +727,16 @@ class ghbot(ircbot):
                     rc = self.del_define(nr)
 
                     if rc == True:
-                        self.send_ok(f'Define {nr} deleted')
+                        self.send_ok(channel, f'Define {nr} deleted')
 
                     else:
-                        self.send_error(f'Failed to delete {nr}')
+                        self.send_error(channel, f'Failed to delete {nr}')
 
                 except ValueError as ve:
-                    self.send_error(f'Parameter {splitted_args[1]} is not a number')
+                    self.send_error(channel, f'Parameter {splitted_args[1]} is not a number')
 
             else:
-                self.send_error(f'{command} missing arguments')
+                self.send_error(channel, f'{command} missing arguments')
 
         elif command == 'help':
             if len(splitted_args) == 2:
@@ -726,20 +745,22 @@ class ghbot(ircbot):
                 self.plugins_lock.acquire()
 
                 if cmd in self.plugins:
-                    self.send_ok(f'Command {cmd}: {self.plugins[cmd][0]} (group: {self.plugins[cmd][1]})')
+                    self.send_ok(channel, f'Command {cmd}: {self.plugins[cmd][0]} (group: {self.plugins[cmd][1]})')
 
                 else:
-                    self.send_error(f'Command/plugin not known')
+                    self.send_error(channel, f'Command/plugin not known')
 
                 self.plugins_lock.release()
 
             else:
-                self.list_plugins()
+                plugins = self.list_plugins()
+
+                self.send_ok(channel, f'Known commands: {plugins}')
 
             return self.internal_command_rc.HANDLED
 
         elif command == 'more':
-            self.send_more()
+            self.send_more(channel)
 
             return self.internal_command_rc.HANDLED
 
@@ -748,13 +769,13 @@ class ghbot(ircbot):
                 user = splitted_args[1]
 
                 if self.forget_acls(user):
-                    self.send_ok(f'User {user} forgotten')
+                    self.send_ok(channel, f'User {user} forgotten')
 
                 else:
-                    self.send_error(f'User {user} not known or some other error')
+                    self.send_error(channel, f'User {user} not known or some other error')
 
             else:
-                self.send_error(f'User not specified')
+                self.send_error(channel, f'User not specified')
 
             return self.internal_command_rc.HANDLED
 
@@ -776,16 +797,16 @@ class ghbot(ircbot):
                     error = self.clone_acls(self.users[from_user], self.users[to_user])
 
                     if error == None:
-                        self.send_ok(f'User {from_} cloned (to {to_})')
+                        self.send_ok(channel, f'User {from_} cloned (to {to_})')
 
                     else:
-                        self.send_error(f'Cannot clone {from_} to {to_}: {error}')
+                        self.send_error(channel, f'Cannot clone {from_} to {to_}: {error}')
 
                 else:
-                    self.send_error(f'Either {from_} or {to_} is unknown')
+                    self.send_error(channel, f'Either {from_} or {to_} is unknown')
 
             else:
-                self.send_error(f'User "from" and/or "to" not specified')
+                self.send_error(channel, f'User "from" and/or "to" not specified')
 
             return self.internal_command_rc.HANDLED
 
@@ -816,10 +837,10 @@ class ghbot(ircbot):
 
                 groups_str = ', '.join(groups) if len(groups) > 1 else '(none)'
 
-                self.send_ok(f'Defined groups: {groups_str}')
+                self.send_ok(channel, f'Defined groups: {groups_str}')
 
             except Exception as e:
-                self.send_error(f'listgroups: exception "{e}" at line number: {e.__traceback__.tb_lineno}')
+                self.send_error(channel, f'listgroups: exception "{e}" at line number: {e.__traceback__.tb_lineno}')
 
             return self.internal_command_rc.HANDLED
 
@@ -852,7 +873,7 @@ class ghbot(ircbot):
 
                     commands_str = ', '.join(commands)
 
-                    self.send_ok(f'Commands in group {group}: {commands_str}')
+                    self.send_ok(channel, f'Commands in group {group}: {commands_str}')
 
                 elif which.lower() == 'members':
                     cursor.execute('SELECT who FROM acl_groups WHERE group_name=%s', (group,))
@@ -871,18 +892,18 @@ class ghbot(ircbot):
 
                     members_str = ', '.join(members)
 
-                    self.send_ok(f'Members in group {group}: {members_str}')
+                    self.send_ok(channel, f'Members in group {group}: {members_str}')
 
             else:
-                self.send_error('Command is: showgroup members|commands <groupname>')
+                self.send_error(channel, 'Command is: showgroup members|commands <groupname>')
 
             return self.internal_command_rc.HANDLED
 
         return self.internal_command_rc.NOT_INTERNAL
     
     def irc_command_insertion_point(self, prefix, command, arguments):
-        if command in [ 'JOIN', 'PART', 'KICK', 'NICK' ]:
-            self.mqtt.publish(f'from/irc/{self.channel[1:]}/{prefix}/{command}', ' '.join(arguments))
+        if command in [ 'JOIN', 'PART', 'KICK', 'NICK', 'QUIT' ]:
+            self.mqtt.publish(f'from/irc/{arguments[0][1:]}/{prefix}/{command}', ' '.join(arguments))
 
         return True
 
@@ -901,7 +922,7 @@ db = dbi(config['db']['host'], config['db']['user'], config['db']['password'], c
 m = mqtt_handler(config['mqtt']['host'], config['mqtt']['prefix'])
 
 # host, port, nick, channel, m, db, command_prefix
-i = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['channel'], m, db, config['irc']['prefix'])
+i = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'])
 
 ka = irc_keepalive(i)
 
