@@ -1,5 +1,6 @@
 #! /usr/bin/python3
 
+import configparser
 from dbi import dbi
 from enum import Enum
 from ircbot import ircbot, irc_keepalive
@@ -885,18 +886,26 @@ class ghbot(ircbot):
 
         return True
 
+if len(sys.argv) != 2:
+    print('Filename of configuration file required')
+
+    sys.exit(1)
+
+config = configparser.ConfigParser()
+config.read(sys.argv[1])
+
 # host, user, password, database
-db = dbi('localhost', 'ghbot', 'yourmum', 'ghbot')
+db = dbi(config['db']['host'], config['db']['user'], config['db']['password'], config['db']['database'])
 
 # broker_ip, topic_prefix
-m = mqtt_handler('mqtt.vm.nurd.space', 'GHBot/')
+m = mqtt_handler(config['mqtt']['host'], config['mqtt']['prefix'])
 
 # host, port, nick, channel, m, db, command_prefix
-i = ghbot('irc.oftc.net', 6667, 'ghbot', '#nurdbottest', m, db, '~')
+i = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['channel'], m, db, config['irc']['prefix'])
 
 ka = irc_keepalive(i)
 
 print('Go!')
 
 while True:
-    time.sleep(1.)
+    time.sleep(3600.)

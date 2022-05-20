@@ -231,7 +231,9 @@ class ircbot(threading.Thread):
                     command = parts[0]
 
                     if not command in self.plugins:
-                        self.send_error(f'Command "{command}" is not known')
+                        # TODO dit terugzetten als nurdbot helemaal uitgefaseerd is
+                        #self.send_error(f'Command "{command}" is not known')
+                        pass
 
                     elif self.check_acls(prefix, command):
                         # returns False when the command is not internal
