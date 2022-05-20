@@ -200,27 +200,33 @@ class ircbot(threading.Thread):
             self.users[prefix.split('!')[0]] = prefix.lower()
 
         elif command == 'PART' or command == 'QUIT':
+            print(prefix)
             del self.users[prefix.split('!')[0]]
 
         elif command == 'KICK':
             del self.users[args[1]]
 
         elif command == 'NICK':
-            old_lower_prefix = prefix.lower()
+            try:
+                old_lower_prefix = prefix.lower()
 
-            excl_mark    = old_lower_prefix.find('!')
+                excl_mark    = old_lower_prefix.find('!')
 
-            old_user     = old_lower_prefix[0:excl_mark]
+                old_user     = old_lower_prefix[0:excl_mark]
 
-            del self.users[old_user]
-        
-            new_user     = args[0]
+                if old_user in self.users:
+                    del self.users[old_user]
+            
+                new_user     = args[0]
 
-            new_prefix   = new_user + old_lower_prefix[excl_mark:]
+                new_prefix   = new_user + old_lower_prefix[excl_mark:]
 
-            self.users[new_user] = new_prefix
+                self.users[new_user] = new_prefix
 
-            print(f'{old_lower_prefix} => {new_prefix}')
+                print(f'{old_lower_prefix} => {new_prefix}')
+
+            except Exception as e:
+                self.send_error(self.error_ch, f'irc::handle_irc_command: exception "{e}" during execution of IRC command NICK at line number: {e.__traceback__.tb_lineno}')
 
         elif command == 'PING':
             if len(args) >= 1:
