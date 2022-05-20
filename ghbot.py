@@ -167,7 +167,7 @@ class ghbot(ircbot):
 
     def _recv_msg_cb(self, topic, msg):
         try:
-            print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
+            # print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
 
             topic = topic[len(self.mqtt.get_topix_prefix()):]
 
@@ -459,7 +459,7 @@ class ghbot(ircbot):
         cursor = self.db.db.cursor()
 
         try:
-            cursor.execute('INSERT INTO aliasses(command, is_command, replacement_text) VALUES(%s, %s, %s)', (command.lower(), is_alias, arguments))
+            cursor.execute('INSERT INTO aliasses(command, is_command, replacement_text) VALUES(%s, %s, %s)', (command.lower(), 1 if is_alias else 0, arguments))
 
             self.db.db.commit()
 
