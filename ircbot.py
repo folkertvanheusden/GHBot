@@ -79,13 +79,12 @@ class ircbot(threading.Thread):
     def send_ok(self, channel, text):
         print(f'OK: {channel}|{text}')
 
-        # 200 is arbitrary: does the irc server give a hint on this value?
-        if len(text) > 200:
-            self.more[channel] = text[200:]
+        if len(text) > 480:
+            self.more[channel] = text[480:]
 
-            n = math.ceil(len(self.more[channel]) / 200)
+            n = math.ceil(len(self.more[channel]) / 480)
 
-            self.send(f'PRIVMSG {channel} :{text[0:200]} ({n} ~more)')
+            self.send(f'PRIVMSG {channel} :{text[0:480]} ({n} ~more)')
 
         else:
             self.send(f'PRIVMSG {channel} :{text}')
@@ -200,6 +199,7 @@ class ircbot(threading.Thread):
             self.users[prefix.split('!')[0].lower()] = prefix.lower()
 
         elif command == 'PART' or command == 'QUIT':
+            print(prefix, command)
             nick = prefix.split('!')[0].lower()
 
             if nick in self.users:
