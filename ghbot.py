@@ -139,6 +139,8 @@ class ghbot(ircbot):
             cmd       = None
             descr     = ''
             acl_group = None
+            athr      = ''
+            location  = ''
 
             for element in elements:
                 k, v = element.split('=')
@@ -152,12 +154,18 @@ class ghbot(ircbot):
                 elif k == 'agrp':
                     acl_group = v
 
+                elif k == 'athr':
+                    acl_group = v
+
+                elif k == 'loc':
+                    location = v
+
             if cmd != None:
                 if not cmd in self.hardcoded_plugins:
                     if not cmd in self.plugins:
                         print(f'_register_plugin: first announcement of {cmd}')
 
-                    self.plugins[cmd] = [descr, acl_group, time.time()]
+                    self.plugins[cmd] = [descr, acl_group, time.time(), athr, location]
 
                 else:
                     print(f'_register_plugin: cannot override "hardcoded" plugin ({cmd})')
