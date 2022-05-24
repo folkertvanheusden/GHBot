@@ -97,6 +97,8 @@ class ghbot(ircbot):
         # commands are available (and what they're for etc.)
         self._plugin_command('register')
 
+        self._plugin_parameter('prefix', self.cmd_prefix, True)
+
     # checks how old the the latest registration of a plugin is.
     # too old? then forget the plugin-command.
     def _plugin_cleaner(self):
@@ -123,7 +125,10 @@ class ghbot(ircbot):
                 print(f'_plugin_cleaner: failed to clean: {e}')
 
     def _plugin_command(self, cmd):
-        self.mqtt.publish('from/bot/command', cmd)
+        self.mqtt.publish('from/bot/command', cmd, persistent=False)
+
+    def _plugin_parameter(self, key, value, persistent):
+        self.mqtt.publish(f'from/bot/parameter/{key}', value, persistent=persistent)
 
     def _register_plugin(self, msg):
         self.plugins_lock.acquire()

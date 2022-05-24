@@ -32,10 +32,14 @@ class mqtt_handler(threading.Thread):
 
         self.client.subscribe(self.topic_prefix + topic)
 
-    def publish(self, topic, content):
+    def publish(self, topic, content, **attributes):
         print(f'mqtt_handler::topic: publish "{content}" to "{self.topic_prefix}{topic}"')
 
-        self.client.publish(self.topic_prefix + topic, content)
+        persistent = False
+        if 'persistent' in attributes:
+            persistent = attributes['persistent']
+
+        self.client.publish(self.topic_prefix + topic, content, retain=persistent)
 
     def on_connect(self, client, userdata, flags, rc):
         for topic in self.topics:
