@@ -219,7 +219,7 @@ class ghbot(ircbot):
         if command in self.plugins and self.plugins[command][1] == None:
             self.plugins_lock.release()
 
-            return True
+            return (True, None)
 
         plugin_group = self.plugins[command][1]
 
@@ -235,7 +235,7 @@ class ghbot(ircbot):
         row = cursor.fetchone()
 
         if row[0] >= 1:
-            return True
+            return (True, plugin_group)
 
         # check per group ACLs (can override group as defined in plugin)
         cursor.execute('SELECT COUNT(*) FROM acls, acl_groups WHERE acl_groups.who=%s AND acl_groups.group_name=acls.who AND command=%s', (who.lower(), command.lower()))
@@ -243,7 +243,7 @@ class ghbot(ircbot):
         row = cursor.fetchone()
 
         if row[0] >= 1:
-            return True
+            return (True, plugin_group)
 
         # check if user is in group as specified by plugin
         cursor.execute('SELECT COUNT(*) FROM acl_groups WHERE group_name=%s AND who=%s', (plugin_group, who))
@@ -251,9 +251,9 @@ class ghbot(ircbot):
         row = cursor.fetchone()
 
         if row[0] >= 1:
-            return True
+            return (True, plugin_group)
 
-        return False
+        return (False, plugin_group)
 
     def list_acls(self, who):
         self.db.probe()

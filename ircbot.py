@@ -271,24 +271,27 @@ class ircbot(threading.Thread):
                         print('COMMAND NOT KNOWN')
                         pass
 
-                    elif self.check_acls(prefix, command):
-                        # returns False when the command is not internal
-                        rc = self.invoke_internal_commands(prefix, command, parts, channel)
+                    else:
+                        access_granted, group_for_command = self.check_acls(prefix, command)
 
-                        if rc == self.internal_command_rc.HANDLED:
-                            pass
+                        if access_granted:
+                            # returns False when the command is not internal
+                            rc = self.invoke_internal_commands(prefix, command, parts, channel)
 
-                        elif rc == self.internal_command_rc.NOT_INTERNAL:
-                            self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/{command}', text)
+                            if rc == self.internal_command_rc.HANDLED:
+                                pass
 
-                        elif rc == self.internal_command_rc.ERROR:
-                            pass
+                            elif rc == self.internal_command_rc.NOT_INTERNAL:
+                                self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/{command}', text)
+
+                            elif rc == self.internal_command_rc.ERROR:
+                                pass
+
+                            else:
+                                self.send_error(channel, f'irc::run: unexpected return code from internal commands handler ({rc})')
 
                         else:
-                            self.send_error(channel, f'irc::run: unexpected return code from internal commands handler ({rc})')
-
-                    else:
-                        self.send_error(channel, f'Command "{command}" denied for user "{prefix}"')
+                            self.send_error(channel, f'Command "{command}" denied for user "{prefix}", one must be in {group_for_command}')
 
                 else:
                     self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/message', args[1])
