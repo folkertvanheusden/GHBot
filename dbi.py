@@ -20,7 +20,16 @@ class dbi(threading.Thread):
         self.start()
 
     def reconnect(self):
-        self.db = MySQLdb.connect(self.host, self.user, self.password, self.database)
+        self.db = MySQLdb.connect(self.host, self.user, self.password, self.database, charset="utf8mb4", use_unicode=True)
+
+        cursor = self.db.cursor()
+
+        cursor.execute('SET NAMES utf8mb4')
+        cursor.execute("SET CHARACTER SET utf8mb4")
+        cursor.execute("SET character_set_connection=utf8mb4")
+
+        cursor.close()
+
 
     def probe(self):
         try:
@@ -29,6 +38,8 @@ class dbi(threading.Thread):
             cursor.execute('SELECT NOW()')
 
             cursor.fetchone()
+
+            cursor.close()
 
         except Exception as e:
             print(f'MySQL indicated error: {e}')

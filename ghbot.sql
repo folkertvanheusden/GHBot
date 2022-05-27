@@ -19,4 +19,4 @@ CREATE TABLE `aliasses` (
   `nr` int(12) NOT NULL AUTO_INCREMENT,
   PRIMARY KEY (`nr`),
   KEY `command` (`command`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;

@@ -48,6 +48,7 @@ class ghbot(ircbot):
         self.plugins['alias']    = ['Add a different name for a command', None, now]
         self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now]
         self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now]
+        self.plugins['apro']     = ['Show commands that match a partial text', None, now]
 
         self.hardcoded_plugins = set()
         for p in self.plugins:
@@ -909,6 +910,27 @@ class ghbot(ircbot):
 
             else:
                 self.send_error(channel, 'Command is: showgroup members|commands <groupname>')
+
+            return self.internal_command_rc.HANDLED
+
+        elif command == 'apro':
+            matching = set()
+
+            which = splitted_args[1].lower()
+
+            for plugin in self.plugins:
+                if which in plugin:
+                    matching.add(plugin)
+
+            for plugin in self.hardcoded_plugins:
+                if which in plugin:
+                    matching.add(plugin)
+
+            if len(matching) == 0:
+                self.send_ok(channel, f'Nothing matches with "{which}"')
+
+            else:
+                self.send_ok(channel, 'Try one of the following: ' + ', '.join(matching))
 
             return self.internal_command_rc.HANDLED
 
