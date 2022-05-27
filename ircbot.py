@@ -170,6 +170,7 @@ class ircbot(threading.Thread):
                     self._set_state(self.session_state.DISCONNECTING)
 
             elif command == '352':  # reponse to 'WHO'
+                print(prefix, command, args)
                 self.users[args[5].lower()] = f'{args[5]}!{args[2]}@{args[3]}'
 
             elif command == '353':  # users in the channel

@@ -559,12 +559,12 @@ class ghbot(ircbot):
             if len(splitted_args) >= 3:  # addacl
                 target_type = splitted_args[1]
 
-                check_user  = splitted_args[2]
+                check_user  = splitted_args[2].lower()
 
             else:
                 target_type = None
 
-                check_user  = splitted_args[1]
+                check_user  = splitted_args[1].lower()
 
             if check_user in self.users:
                 identifier = self.users[check_user]
@@ -574,6 +574,8 @@ class ghbot(ircbot):
 
             elif self.is_group(check_user):
                 identifier = check_user
+
+#        print(f'identifier {identifier}, user known: {self.check_user_known(identifier)}, is group: {self.is_group(identifier)}')
 
         identifier_is_known = (self.check_user_known(identifier) or self.is_group(identifier)) if identifier != None else False
 
@@ -587,6 +589,8 @@ class ghbot(ircbot):
 
                 if check_user in self.users:
                     identifier = self.users[check_user]
+
+            print(identifier, check_user, splitted_args)
 
             if group_idx != None:
                 group_name = splitted_args[group_idx + 1]
