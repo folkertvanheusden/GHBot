@@ -3,6 +3,7 @@
 import configparser
 from dbi import dbi
 from enum import Enum
+from http_server import http_server
 from ircbot import ircbot, irc_keepalive
 import math
 from mqtt_handler import mqtt_handler
@@ -34,21 +35,21 @@ class ghbot(ircbot):
 
         now              = time.time()
 
-        self.plugins['addacl']   = ['Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops', now]
-        self.plugins['delacl']   = ['Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops', now]
-        self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now]
-        self.plugins['forget']   = ['Forget a person; removes all ACLs for that nick', 'sysops', now]
-        self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now]
-        self.plugins['meet']     = ['Use this when a user (nick) has a new hostname', 'sysops', now]
-        self.plugins['commands'] = ['Show list of known commands', None, now]
-        self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now]
-        self.plugins['more']     = ['Continue outputting a too long line of text', None, now]
-        self.plugins['define']   = ['Define a replacement for text, see ~alias', None, now]
-        self.plugins['deldefine']= ['Delete a define (by number)', None, now]
-        self.plugins['alias']    = ['Add a different name for a command', None, now]
-        self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now]
-        self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now]
-        self.plugins['apro']     = ['Show commands that match a partial text', None, now]
+        self.plugins['addacl']   = ['Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['delacl']   = ['Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['forget']   = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['meet']     = ['Use this when a user (nick) has a new hostname', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['commands'] = ['Show list of known commands', None, now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['define']   = ['Define a replacement for text, see ~alias', None, now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['deldefine']= ['Delete a define (by number)', None, now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['alias']    = ['Add a different name for a command', None, now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['apro']     = ['Show commands that match a partial text', None, now, 'Flok', 'harkbot.vm.nurd.space']
 
         self.hardcoded_plugins = set()
         for p in self.plugins:
@@ -961,9 +962,11 @@ db = dbi(config['db']['host'], config['db']['user'], config['db']['password'], c
 m = mqtt_handler(config['mqtt']['host'], config['mqtt']['prefix'])
 
 # host, port, nick, channel, m, db, command_prefix
-i = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'])
+g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'])
 
-ka = irc_keepalive(i)
+ka = irc_keepalive(g)
+
+h = http_server(8000, g)
 
 print('Go!')
 
