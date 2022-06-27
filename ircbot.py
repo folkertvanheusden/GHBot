@@ -177,6 +177,10 @@ class ircbot(threading.Thread):
                 for user in args[3].split(' '):
                     self.users[user.lower()] = '?'
 
+#            elif command == '331':  # no topic set
+# TODO
+#                self.topic[
+
             # 315 is 'end of who'
             if command == '352' or command == '315':
                 with self.cond_352:

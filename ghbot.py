@@ -38,7 +38,7 @@ class ghbot(ircbot):
         self.plugins['addacl']   = ['Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['delacl']   = ['Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['forget']   = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['deluser']  = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['meet']     = ['Use this when a user (nick) has a new hostname', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['commands'] = ['Show list of known commands', None, now, 'Flok', 'harkbot.vm.nurd.space']
@@ -157,7 +157,7 @@ class ghbot(ircbot):
                     acl_group = v
 
                 elif k == 'athr':
-                    acl_group = v
+                    athr = v
 
                 elif k == 'loc':
                     location = v
@@ -554,7 +554,7 @@ class ghbot(ircbot):
 
         check_user  = '(not given)'
 
-        print('GREP', channel, command, prefix, splitted_args)
+        # print('GREP', channel, command, prefix, splitted_args)
 
         if splitted_args != None and len(splitted_args) >= 2:
             if len(splitted_args) >= 3:  # addacl
@@ -783,11 +783,11 @@ class ghbot(ircbot):
 
             return self.internal_command_rc.HANDLED
 
-        elif command == 'forget':
+        elif command == 'deluser':
             if len(splitted_args) == 2:
                 user = splitted_args[1]
 
-                if self.forget_acls(user):
+                if not '%' in user and self.forget_acls(user):
                     self.send_ok(channel, f'User {user} forgotten')
 
                 else:
