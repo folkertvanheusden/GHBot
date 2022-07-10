@@ -96,10 +96,10 @@ class ircbot(threading.Thread):
             self.send(f'PRIVMSG {channel} :No more ~more')
 
         else:
-            space = self.more[channel].find(' ', 190, 200)
+            space = self.more[channel].find(' ', 150, 175)
 
             if space == -1:
-                space = 200
+                space = 175
 
             current_more = self.more[channel][0:space].strip()
 
@@ -109,7 +109,7 @@ class ircbot(threading.Thread):
             else:
                 self.more[channel] = ''
 
-            n = math.ceil(len(self.more[channel]) / 200)
+            n = math.ceil(len(self.more[channel]) / 175)
 
             self.send(f'PRIVMSG {channel} :{current_more} ({n} ~more)')
 
@@ -177,9 +177,8 @@ class ircbot(threading.Thread):
                 for user in args[3].split(' '):
                     self.users[user.lower()] = '?'
 
-#            elif command == '331':  # no topic set
-# TODO
-#                self.topic[
+            elif command == '331' or command == '332':  # no topic set / topic
+                self.mqtt.publish(f'from/irc/{args[1][1:]}/topic', args[2])
 
             # 315 is 'end of who'
             if command == '352' or command == '315':
@@ -304,6 +303,9 @@ class ircbot(threading.Thread):
         elif command == 'NOTICE':
             if len(args) >= 2:
                 self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/notice', args[1])
+
+        elif command == 'TOPIC':
+            self.mqtt.publish(f'from/irc/{args[0][1:]}/topic', args[1])
 
         else:
             print(f'irc::run: command "{command}" is not known (for {prefix})')

@@ -548,7 +548,14 @@ class ghbot(ircbot):
 
         space      = text.find(' ')
 
-        query_text = text[space + 1:] if space != -1 else ''
+        if space == -1:
+            query_text = username
+
+            if '!' in query_text:
+                query_text = query_text[0:query_text.find('!')]
+
+        else:
+            query_text = text[space + 1:]
 
         if is_command:  # initially only replaces command
             text = repl_text + ' ' + query_text
