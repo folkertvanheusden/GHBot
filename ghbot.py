@@ -97,6 +97,9 @@ class ghbot(ircbot):
         self.plugin_cleaner = threading.Thread(target=self._plugin_cleaner)
         self.plugin_cleaner.start()
 
+        self.topic_announcer = threading.Thread(target=self._topic_announcer)
+        self.topic_announcer.start()
+
         # ask plugins to register themselves so that we know which
         # commands are available (and what they're for etc.)
         self._plugin_command('register')
@@ -104,7 +107,7 @@ class ghbot(ircbot):
         self._plugin_parameter('prefix', self.cmd_prefix, True)
 
     # checks how old the the latest registration of a plugin is.
-    # too old? then forget the plugin-command.
+    # too old? (10 seconds) then forget the plugin-command.
     def _plugin_cleaner(self):
         while True:
             try:
@@ -124,6 +127,17 @@ class ghbot(ircbot):
                     del self.plugins[plugin]
 
                 self.plugins_lock.release()
+
+            except Exception as e:
+                print(f'_plugin_cleaner: failed to clean: {e}')
+
+    def _topic_announcer(self):
+        while True:
+            try:
+                time.sleep(2.5)
+
+                for channel in self.topics:
+                    self.mqtt.publish(f'from/irc/{channel}/topic', self.topics[channel])
 
             except Exception as e:
                 print(f'_plugin_cleaner: failed to clean: {e}')
@@ -623,7 +637,7 @@ class ghbot(ircbot):
                 if check_user in self.users:
                     identifier = self.users[check_user]
 
-            print(identifier, check_user, splitted_args)
+            # print(identifier, check_user, splitted_args)
 
             if group_idx != None:
                 group_name = splitted_args[group_idx + 1]

@@ -46,6 +46,8 @@ class ircbot(threading.Thread):
 
         self.more        = dict()
 
+        self.topics      = dict()
+
         for channel in channels:
             self.more[channel] = ''
 
@@ -155,7 +157,6 @@ class ircbot(threading.Thread):
                 self.cond_352.wait(5.0 - t_diff)
 
     def invoke_internal_commands(self, prefix, command, splitted_args, channel):
-        print('HIER')
         return self.internal_command_rc.NOT_INTERNAL
 
     def handle_irc_commands(self, prefix, command, args):
@@ -178,6 +179,8 @@ class ircbot(threading.Thread):
                     self.users[user.lower()] = '?'
 
             elif command == '331' or command == '332':  # no topic set / topic
+                self.topics[args[1][1:]] = args[2]
+
                 self.mqtt.publish(f'from/irc/{args[1][1:]}/topic', args[2])
 
             # 315 is 'end of who'
@@ -305,6 +308,8 @@ class ircbot(threading.Thread):
                 self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/notice', args[1])
 
         elif command == 'TOPIC':
+            self.topics[args[0][1:]] = args[1]
+
             self.mqtt.publish(f'from/irc/{args[0][1:]}/topic', args[1])
 
         else:
