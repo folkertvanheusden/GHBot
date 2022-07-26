@@ -51,7 +51,9 @@ class mqtt_handler(threading.Thread):
         # print(f'mqtt_handler::topic: received "{msg.payload}" in topic "{msg.topic}"')
 
         for topic in self.topics:
-            if topic[0] == msg.topic:
+            cleaned = topic[0].replace('#','')
+
+            if cleaned in msg.topic:
                 topic[1](msg.topic, msg.payload.decode('utf-8'))
 
                 return

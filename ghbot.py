@@ -61,6 +61,8 @@ class ghbot(ircbot):
         self.topic_notice  = []
         self.topic_topic   = []
 
+        self.topic_to_nick = f'to/irc-person/'
+
         for channel in self.channels:
             self.topic_privmsg.append(f'to/irc/{channel[1:]}/privmsg')  # Send reply in channel via PRIVMSG
             self.topic_notice.append(f'to/irc/{channel[1:]}/notice')   # Send reply in channel via NOTICE
@@ -76,6 +78,8 @@ class ghbot(ircbot):
 
         for topic in self.topic_topic:
             self.mqtt.subscribe(topic, self._recv_msg_cb)
+
+        self.mqtt.subscribe(self.topic_to_nick + '#', self._recv_msg_cb)
 
         self.mqtt.subscribe(self.topic_register, self._recv_msg_cb)
 
@@ -198,7 +202,7 @@ class ghbot(ircbot):
 
     def _recv_msg_cb(self, topic, msg):
         try:
-            # print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
+            #print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
 
             topic = topic[len(self.mqtt.get_topix_prefix()):]
 
@@ -211,6 +215,10 @@ class ghbot(ircbot):
 
             if topic in self.topic_privmsg:
                 self.send_ok('#' + parts[2], msg)
+
+            elif parts[0] + '/' + parts[1] in self.topic_to_nick:
+                self.send(f'PRIVMSG {parts[2]} :{msg}')
+                #print(f'========================> PRIVMSG {parts[2]} :{msg}')
 
             elif topic in self.topic_notice:
                 self.send(f'NOTICE #{parts[2]} :{msg}')
