@@ -202,7 +202,7 @@ class ghbot(ircbot):
 
     def _recv_msg_cb(self, topic, msg):
         try:
-            #print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
+            # print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
 
             topic = topic[len(self.mqtt.get_topix_prefix()):]
 
@@ -216,10 +216,6 @@ class ghbot(ircbot):
             if topic in self.topic_privmsg:
                 self.send_ok('#' + parts[2], msg)
 
-            elif parts[0] + '/' + parts[1] in self.topic_to_nick:
-                self.send(f'PRIVMSG {parts[2]} :{msg}')
-                #print(f'========================> PRIVMSG {parts[2]} :{msg}')
-
             elif topic in self.topic_notice:
                 self.send(f'NOTICE #{parts[2]} :{msg}')
 
@@ -228,6 +224,10 @@ class ghbot(ircbot):
 
             elif topic in self.topic_register:
                 self._register_plugin(msg)
+
+            elif parts[0] + '/' + parts[1] in self.topic_to_nick:
+                self.send(f'PRIVMSG {parts[2]} :{msg}')
+                # print('==========================> PRIVMSG trigger')
 
             else:
                 print(f'irc::_recv_msg_cb: invalid topic {topic}')
