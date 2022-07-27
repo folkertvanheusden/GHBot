@@ -669,7 +669,7 @@ class ghbot(ircbot):
 
                 if plugin_known:
                     if self.add_acl(identifier, cmd_name):  # who, command
-                        self.send_ok(channel, f'ACL added for user {identifier} for command {cmd_name}')
+                        self.send_ok(channel, f'ACL added for user or group {identifier} for command {cmd_name}')
 
                         return self.internal_command_rc.HANDLED
 
