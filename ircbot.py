@@ -81,12 +81,12 @@ class ircbot(threading.Thread):
     def send_ok(self, channel, text):
         print(f'OK: {channel}|{text}')
 
-        if len(text) > 480:
-            self.more[channel] = text[480:]
+        if len(text) > 300:
+            self.more[channel] = text[300:]
 
-            n = math.ceil(len(self.more[channel]) / 480)
+            n = math.ceil(len(self.more[channel]) / 300)
 
-            self.send(f'PRIVMSG {channel} :{text[0:480]} ({n} ~more)')
+            self.send(f'PRIVMSG {channel} :{text[0:300]} ({n} ~more)')
 
         else:
             self.send(f'PRIVMSG {channel} :{text}')
@@ -98,10 +98,10 @@ class ircbot(threading.Thread):
             self.send(f'PRIVMSG {channel} :No more ~more')
 
         else:
-            space = self.more[channel].find(' ', 150, 175)
+            space = self.more[channel].find(' ', 250, 300)
 
             if space == -1:
-                space = 175
+                space = 275
 
             current_more = self.more[channel][0:space].strip()
 
@@ -111,7 +111,7 @@ class ircbot(threading.Thread):
             else:
                 self.more[channel] = ''
 
-            n = math.ceil(len(self.more[channel]) / 175)
+            n = math.ceil(len(self.more[channel]) / 300)
 
             self.send(f'PRIVMSG {channel} :{current_more} ({n} ~more)')
 
