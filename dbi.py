@@ -14,35 +14,49 @@ class dbi(threading.Thread):
         self.password = password
         self.database = database
 
-        self.reconnect()
+        while True:
+            try:
+                self.reconnect()
+
+                self.probe()
+
+                break
+
+            except Exception as e:
+                print(f'Cannot connect to MySQL: {e}')
+
+                time.sleep(1)
 
         self.name = 'GHBot MySQL'
         self.start()
 
     def reconnect(self):
-        self.db = MySQLdb.connect(self.host, self.user, self.password, self.database, charset="utf8mb4", use_unicode=True)
+        try:
+            self.db = MySQLdb.connect(self.host, self.user, self.password, self.database, charset="utf8mb4", use_unicode=True)
 
-        cursor = self.db.cursor()
+            cursor = self.db.cursor()
 
-        cursor.execute('SET NAMES utf8mb4')
-        cursor.execute("SET CHARACTER SET utf8mb4")
-        cursor.execute("SET character_set_connection=utf8mb4")
+            cursor.execute('SET NAMES utf8mb4')
+            cursor.execute("SET CHARACTER SET utf8mb4")
+            cursor.execute("SET character_set_connection=utf8mb4")
 
-        cursor.close()
+            cursor.close()
 
+        except Exception as e:
+            print(f'dbi::reconnect: exception "{e}" at line number: {e.__traceback__.tb_lineno}')
 
     def probe(self):
         try:
             cursor = self.db.cursor()
 
-            cursor.execute('SELECT NOW()')
+            cursor.execute('SELECT NOW(), VERSION()')
 
             cursor.fetchone()
 
             cursor.close()
 
         except Exception as e:
-            print(f'MySQL indicated error: {e}')
+            print(f'dbi::probe: MySQL indicated error: {e}')
 
             self.reconnect()
 
