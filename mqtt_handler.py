@@ -2,6 +2,7 @@
 
 import paho.mqtt.client as mqtt
 import threading
+import time
 
 
 class mqtt_handler(threading.Thread):
@@ -17,7 +18,16 @@ class mqtt_handler(threading.Thread):
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
 
-        self.client.connect(broker_ip, 1883, 60)
+        while True:
+            try:
+                self.client.connect(broker_ip, 1883, 60)
+
+                break
+
+            except Exception as e:
+                print(f'exception "{e}" at line number: {e.__traceback__.tb_lineno}')
+
+                time.sleep(1)
 
         self.name = 'GHBot MQTT'
         self.start()
