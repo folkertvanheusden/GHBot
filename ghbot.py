@@ -7,6 +7,7 @@ from http_server import http_server
 from ircbot import ircbot, irc_keepalive
 import math
 from mqtt_handler import mqtt_handler
+import random
 import select
 import socket
 import sys
@@ -40,7 +41,7 @@ class ghbot(ircbot):
         self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['deluser']  = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['meet']     = ['Use this when a user (nick) has a new hostname', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['meet']     = ['Use this when a user (nick) has a new hostname: meet <nick>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['commands'] = ['Show list of known commands', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'Flok', 'harkbot.vm.nurd.space']
@@ -586,6 +587,9 @@ class ghbot(ircbot):
             text = repl_text
 
         text = text.replace('%q', query_text)
+
+        if '%R' in text:
+            text = text.replace('%R', f'{random.randint(0, 100)}')
 
         exclamation_mark = username.find('!')
 
