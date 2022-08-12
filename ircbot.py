@@ -310,6 +310,14 @@ class ircbot(threading.Thread):
 
             self.mqtt.publish(f'from/irc/{args[0][1:]}/topic', args[1])
 
+        elif command == 'INVITE':
+            # do not enter any channel, only the selected
+            for channel in self.channels:
+                if self.send(f'JOIN {channel}') == False:
+                    self._set_state(self.session_state.DISCONNECTING)
+
+                    break
+
         else:
             print(f'irc::run: command "{command}" is not known (for {prefix})')
 
