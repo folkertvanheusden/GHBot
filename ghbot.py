@@ -1013,6 +1013,9 @@ class ghbot(ircbot):
                 if which in plugin:
                     matching.add(plugin)
 
+            for alias_define in self.find_alias_define_by_substring(which):
+                matching.add(f'{alias_define[0]} ({alias_define[1]}, {alias_define[2]})')
+
             if len(matching) == 0:
                 self.send_ok(channel, f'Nothing matches with "{which}"')
 
@@ -1022,7 +1025,26 @@ class ghbot(ircbot):
             return self.internal_command_rc.HANDLED
 
         return self.internal_command_rc.NOT_INTERNAL
-    
+
+    def find_alias_define_by_substring(self, which):
+        try:
+            self.db.probe()
+
+            cursor = self.db.db.cursor()
+            cursor.execute('SELECT command, is_command, nr FROM aliasses WHERE command like %s', (f'%%{which}%%',))
+
+            rows = []
+
+            for row in cursor:
+                rows.append((row[0], 'alias' if row[1] == 1 else 'define', row[2]))
+
+            return rows
+
+        except Exception as e:
+            self.send_error(self.error_ch, f'irc::add_define: failed to insert alias ({e})')
+
+        return [ ]
+
     def irc_command_insertion_point(self, prefix, command, arguments):
         if command in [ 'JOIN', 'PART', 'KICK', 'NICK', 'QUIT' ]:
             self.mqtt.publish(f'from/irc/{arguments[0][1:]}/{prefix}/{command}', ' '.join(arguments))
