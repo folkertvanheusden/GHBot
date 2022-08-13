@@ -7,6 +7,7 @@ from http_server import http_server
 from ircbot import ircbot, irc_keepalive
 import math
 from mqtt_handler import mqtt_handler
+from plugin_handler import plugins_class
 import random
 import select
 import socket
@@ -22,20 +23,23 @@ class ghbot(ircbot):
         ERROR        = 0x10
         NOT_INTERNAL = 0xff
 
-    def __init__(self, host, port, nick, channels, m, db, cmd_prefix):
+    def __init__(self, host, port, nick, channels, m, db, cmd_prefix, local_plugin_subdir):
         super().__init__(host, port, nick, channels)
 
-        self.cmd_prefix  = cmd_prefix
+        self.cmd_prefix    = cmd_prefix
 
-        self.db          = db
+        self.db            = db
 
-        self.mqtt        = m
+        self.mqtt          = m
 
-        self.plugins     = dict()
-        self.plugins_lock= threading.Lock()
+        self.plugins       = dict()
+        self.plugins_lock  = threading.Lock()
 
-        now              = time.time()
+        self.local_plugins = plugins_class(local_plugin_subdir, 'ghb_')
 
+        now                = time.time()
+
+        #                          v make these into dictionaries v  TODO
         self.plugins['addacl']   = ['Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['delacl']   = ['Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
@@ -53,10 +57,22 @@ class ghbot(ircbot):
         self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['apro']     = ['Show commands that match a partial text', None, now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['reloadlp'] = ['Reload a "local" plugin', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['listlp']   = ['List "local" plugins', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['showlp']   = ['Show commands of a "local" plugin', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
 
         self.hardcoded_plugins = set()
         for p in self.plugins:
             self.hardcoded_plugins.add(p)
+
+        for local_plugin in self.local_plugins.list_plugins():  # iterate over each plugin .py-file
+            all_commands = self.local_plugins.get_commandos(local_plugin)
+
+            for command, parameters in all_commands:  # iterate over each command that a plugin can have
+                # they're hardcoded; don't allow to override
+                self.hardcoded_plugins.add(command)
+                # register in the plugin-list
+                self.plugins[command] = parameters
 
         self.topic_privmsg = []
         self.topic_notice  = []
@@ -1029,6 +1045,37 @@ class ghbot(ircbot):
 
             return self.internal_command_rc.HANDLED
 
+        elif command == 'reloadlp':
+            matching = set()
+
+            which = splitted_args[1].lower()
+
+            if which in self.local_plugins.list_plugins():
+                if self.local_plugins.reload_module(which):
+                    self.send_ok(channel, f'Local plugins {which} reloaded')
+
+                    return self.internal_command_rc.HANDLED
+
+            self.send_ok(channel, f'Local plugins {which} NOT reloaded')
+
+            return self.internal_command_rc.HANDLED
+
+        elif command == 'listlp':
+            self.send_ok(channel, f'Local plugins: {", ".join(self.local_plugins.list_plugins())}')
+
+            return self.internal_command_rc.HANDLED
+
+        elif command == 'showlp':
+            which = splitted_args[1].lower()
+
+            all_commands = self.local_plugins.get_commandos(which)
+
+            commands = [command for command, parameters in all_commands]
+
+            self.send_ok(channel, f'Local plugins: {", ".join(commands)}')
+
+            return self.internal_command_rc.HANDLED
+
         return self.internal_command_rc.NOT_INTERNAL
 
     def find_alias_define_by_substring(self, which):
@@ -1071,7 +1118,7 @@ db = dbi(config['db']['host'], config['db']['user'], config['db']['password'], c
 m = mqtt_handler(config['mqtt']['host'], config['mqtt']['prefix'])
 
 # host, port, nick, channel, m, db, command_prefix
-g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'])
+g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'], 'plugins')
 
 ka = irc_keepalive(g)
 
