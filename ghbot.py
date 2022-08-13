@@ -35,7 +35,7 @@ class ghbot(ircbot):
         self.plugins       = dict()
         self.plugins_lock  = threading.Lock()
 
-        self.local_plugins = plugins_class(local_plugin_subdir, 'ghb_')
+        self.local_plugins = plugins_class(self, local_plugin_subdir, 'ghb_')
 
         now                = time.time()
 
@@ -60,6 +60,7 @@ class ghbot(ircbot):
         self.plugins['reloadlp'] = ['Reload a "local" plugin', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['listlp']   = ['List "local" plugins', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['showlp']   = ['Show commands of a "local" plugin', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['loadlp']   = ['Load "local" plugins that are not loaded yet', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
 
         self.hardcoded_plugins = set()
         for p in self.plugins:
@@ -1060,6 +1061,13 @@ class ghbot(ircbot):
 
             return self.internal_command_rc.HANDLED
 
+        elif command == 'loadlp':
+            which = self.local_plugins.load_modules()
+
+            self.send_ok(channel, f'Done (loaded: {", ".join(which)})')
+
+            return self.internal_command_rc.HANDLED
+
         elif command == 'listlp':
             self.send_ok(channel, f'Local plugins: {", ".join(self.local_plugins.list_plugins())}')
 
@@ -1074,6 +1082,9 @@ class ghbot(ircbot):
 
             self.send_ok(channel, f'Local plugins: {", ".join(commands)}')
 
+            return self.internal_command_rc.HANDLED
+
+        elif self.local_plugins.process(identifier, (prefix, command, splitted_args, channel)):
             return self.internal_command_rc.HANDLED
 
         return self.internal_command_rc.NOT_INTERNAL

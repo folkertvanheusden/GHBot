@@ -5,22 +5,42 @@ import os
 import sys
 
 class plugins_class:
-    def __init__(self, directory, name_prefix):
-        self.directory = directory
+    def __init__(self, ghbot_instance, directory, name_prefix):
+        print(self, ghbot_instance)
+        self.ghbot       = ghbot_instance
+        self.directory   = directory
+        self.name_prefix = name_prefix
 
-        self.plugins   = dict()
+        self.plugins     = dict()
 
-        for filename in os.listdir(directory):
-            if filename[0:len(name_prefix)] == name_prefix:
-                name_only = filename.rstrip('.py')
-                full_name = f'{directory}.{name_only}'
+        self.load_modules()
+
+    def load_modules(self):
+        which = []
+
+        for filename in os.listdir(self.directory):
+            name_only = filename.rstrip('.py')
+
+            if filename[0:len(self.name_prefix)] == self.name_prefix and not name_only in self.plugins:
+                full_name = f'{self.directory}.{name_only}'
                 self.plugins[name_only] = importlib.import_module(full_name)
 
+                which.append(name_only)
+
+        return which
+
     # returns True if any plugin processed the command
-    def process(self, nick, command_text):
+    def process(self, nick, parameters):
+        print('process')
+
         for name in self.plugins:
-            if self.plugins[name].process(nick, command_text):
+            print(f'trying {name}')
+
+            if self.plugins[name].process(self.ghbot, nick, parameters):
+                print(f'plugin said ok')
                 return True
+
+        print('no matches')
 
         return False
 
