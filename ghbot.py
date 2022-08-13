@@ -215,7 +215,7 @@ class ghbot(ircbot):
                 return
 
             if topic in self.topic_privmsg:
-                self.send_ok('#' + parts[2], msg)
+                self.send_ok('#' + parts[2], self.escapes(msg))
 
             elif topic in self.topic_notice:
                 self.send(f'NOTICE #{parts[2]} :{msg}')
@@ -228,7 +228,6 @@ class ghbot(ircbot):
 
             elif parts[0] + '/' + parts[1] in self.topic_to_nick:
                 self.send(f'PRIVMSG {parts[2]} :{msg}')
-                # print('==========================> PRIVMSG trigger')
 
             else:
                 print(f'irc::_recv_msg_cb: invalid topic {topic}')
@@ -553,6 +552,17 @@ class ghbot(ircbot):
 
         return None
 
+    def escapes(self, text):
+        if '%R' in text:
+            text = text.replace('%R', f'{random.randint(0, 100)}')
+
+        if '%m' in text:
+            text = text.strip('%m')
+
+            text = '\001ACTION ' + text.strip() + '\001'
+
+        return text
+
     def check_aliasses(self, text, username):
         parts   = text.split(' ')
         command = parts[0]
@@ -586,22 +596,17 @@ class ghbot(ircbot):
         else:
             text = repl_text
 
+        text = self.escapes(text)
+
+        if username != None:
+            exclamation_mark = username.find('!')
+
+            if exclamation_mark != -1:
+                username = username[0:exclamation_mark]
+
+            text = text.replace('%u', username)
+
         text = text.replace('%q', query_text)
-
-        if '%R' in text:
-            text = text.replace('%R', f'{random.randint(0, 100)}')
-
-        exclamation_mark = username.find('!')
-
-        if exclamation_mark != -1:
-            username = username[0:exclamation_mark]
-
-        text = text.replace('%u', username)
-
-        if '%m' in text:
-            text = text.strip('%m')
-
-            text = '\001ACTION ' + text.strip() + '\001'
 
         return (is_command, text)
 
