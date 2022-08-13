@@ -31,16 +31,13 @@ class plugins_class:
 
     # returns True if any plugin processed the command
     def process(self, nick, parameters):
-        print('process')
-
         for name in self.plugins:
-            print(f'trying {name}')
+            try:
+                if self.plugins[name].process(self.ghbot, nick, parameters):
+                    return True
 
-            if self.plugins[name].process(self.ghbot, nick, parameters):
-                print(f'plugin said ok')
-                return True
-
-        print('no matches')
+            except Exception as e:
+                print(f'while invoking local plugin {name}: "{e}" at line number: {e.__traceback__.tb_lineno}')
 
         return False
 
@@ -65,7 +62,7 @@ class plugins_class:
 
 if __name__ == "__main__":
     plugin_subdir = 'plugins'  # relative path!!
-    plugins = plugins_class(plugin_subdir, 'ghb_')
+    plugins = plugins_class(None, plugin_subdir, 'ghb_')
 
     print(plugins.list_plugins())
 
