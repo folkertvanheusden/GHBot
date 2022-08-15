@@ -118,6 +118,11 @@ class ircbot(threading.Thread):
 
         self.send(f'PRIVMSG {channel} :ERROR: {text}')
 
+    def send_error_notice(self, channel, text):
+        print(f'ERROR: {channel}|{text}')
+
+        self.send(f'NOTICE {channel} :ERROR: {text}')
+
     def parse_irc_line(self, s):
         # from https://stackoverflow.com/questions/930700/python-parsing-irc-messages
 
@@ -271,12 +276,13 @@ class ircbot(threading.Thread):
                     command = parts[0]
 
                     if not command in self.plugins:
+                        nick = prefix.split('!')[0].lower()
+
                         if command in self.plugins_gone:
-                            self.send_error(channel, f'Command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
+                            self.send_error_notice(channel, f'{nick}: command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
 
                         else:
-                            print('COMMAND NOT KNOWN')
-                            #self.send_error(channel, f'Command "{command}" is not known')
+                            self.send_error_notice(channel, f'{nick}: command "{command}" is not known')
 
                     else:
                         access_granted, group_for_command = self.check_acls(prefix, command)
