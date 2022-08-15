@@ -34,6 +34,7 @@ class ghbot(ircbot):
 
         self.plugins       = dict()
         self.plugins_lock  = threading.Lock()
+        self.plugins_gone  = dict()
 
         self.local_plugins = plugins_class(self, local_plugin_subdir, 'ghb_')
 
@@ -148,6 +149,8 @@ class ghbot(ircbot):
                 for plugin in to_delete:
                     del self.plugins[plugin]
 
+                    self.plugins_gone[plugin] = now
+
                 self.plugins_lock.release()
 
             except Exception as e:
@@ -206,6 +209,9 @@ class ghbot(ircbot):
                         print(f'_register_plugin: first announcement of {cmd}')
 
                     self.plugins[cmd] = [descr, acl_group, time.time(), athr, location]
+
+                    if cmd in self.plugins_gone:
+                        del self.plugins_gone[cmd]
 
                 else:
                     print(f'_register_plugin: cannot override "hardcoded" plugin ({cmd})')

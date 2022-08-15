@@ -271,10 +271,12 @@ class ircbot(threading.Thread):
                     command = parts[0]
 
                     if not command in self.plugins:
-                        # TODO dit terugzetten als nurdbot helemaal uitgefaseerd is
-                        #self.send_error(channel, f'Command "{command}" is not known')
-                        print('COMMAND NOT KNOWN')
-                        pass
+                        if command in self.plugins_gone:
+                            self.send_error(channel, f'Command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
+
+                        else:
+                            print('COMMAND NOT KNOWN')
+                            #self.send_error(channel, f'Command "{command}" is not known')
 
                     else:
                         access_granted, group_for_command = self.check_acls(prefix, command)
