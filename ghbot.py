@@ -597,7 +597,7 @@ class ghbot(ircbot):
         row = cursor.fetchone()
 
         if row == None:
-            return (False, None)
+            return (False, None, False)
 
         is_command = row[0]
         repl_text  = row[1]
@@ -631,7 +631,14 @@ class ghbot(ircbot):
 
         text = text.replace('%q', query_text)
 
-        return (is_command, text)
+        notice = False
+
+        if '%n' in text:
+            text = text.replace('%n', '')
+
+            notice = True
+
+        return (is_command, text, notice)
 
     def invoke_internal_commands(self, prefix, command, splitted_args, channel):
         identifier  = None

@@ -78,6 +78,10 @@ class ircbot(threading.Thread):
 
         return False
 
+    # TODO: more
+    def send_notice(self, channel, text):
+        self.send(f'NOTICE {channel} :{text}')
+
     def send_ok(self, channel, text):
         print(f'OK: {channel}|{text}')
 
@@ -113,11 +117,13 @@ class ircbot(threading.Thread):
 
             self.send(f'PRIVMSG {channel} :{current_more} ({n} ~more)')
 
+    # TODO: more
     def send_error(self, channel, text):
         print(f'ERROR: {channel}|{text}')
 
         self.send(f'PRIVMSG {channel} :ERROR: {text}')
 
+    # TODO: more
     def send_error_notice(self, channel, text):
         print(f'ERROR: {channel}|{text}')
 
@@ -260,11 +266,15 @@ class ircbot(threading.Thread):
                 print(channel, text, self.cmd_prefix)
 
                 if text[0] == self.cmd_prefix:
-                    is_command, new_text = self.check_aliasses(text[1:], prefix)
+                    is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix)
 
                     if new_text != None:
                         if not is_command:
-                            self.send_ok(channel, new_text)
+                            if is_notice:
+                                self.send_notice(channel, new_text)
+
+                            else:
+                                self.send_ok(channel, new_text)
 
                             return
 
