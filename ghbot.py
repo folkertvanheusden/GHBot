@@ -98,6 +98,9 @@ class ghbot(ircbot):
         for topic in self.topic_topic:
             self.mqtt.subscribe(topic, self._recv_msg_cb)
 
+        self.mqtt.subscribe('to/irc/#', self._recv_msg_cb)  # required for pm-commands :-/
+        self.pm_topic = 'to/irc/\\'  # to match on
+
         self.mqtt.subscribe(self.topic_to_nick + '#', self._recv_msg_cb)
 
         self.mqtt.subscribe(self.topic_register, self._recv_msg_cb)
@@ -232,6 +235,8 @@ class ghbot(ircbot):
 
             parts = topic.split('/')
 
+            print(self.pm_topic, topic, '|', parts)
+
             if msg.find('\n') != -1 or msg.find('\r') != -1:
                 print(f'irc::_recv_msg_cb: invalid content to send for {topic}')
 
@@ -250,7 +255,17 @@ class ghbot(ircbot):
                 self._register_plugin(msg)
 
             elif parts[0] + '/' + parts[1] in self.topic_to_nick:
-                self.send(f'PRIVMSG {parts[2]} :{msg}')
+                nick = parts[2]
+
+                if nick[0] == '\\':
+                    nick = nick[1:]
+
+                self.send(f'PRIVMSG {nick} :{msg}')
+
+            elif self.pm_topic in topic:
+                nick = parts[2][1:]  # remove '\'
+
+                self.send(f'PRIVMSG {nick} :{msg}')
 
             else:
                 print(f'irc::_recv_msg_cb: invalid topic {topic}')
@@ -258,7 +273,7 @@ class ghbot(ircbot):
                 return
 
         except Exception as e:
-            print(f'irc::_recv_msg_cb: exception {e} while processing {topic}|{msg}')
+            print(f'irc::_recv_msg_cb: exception {e} while processing {topic}|{msg} (at line number: {e.__traceback__.tb_lineno})')
 
     def check_acls(self, who, command):
         self.plugins_lock.acquire()
@@ -403,12 +418,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return True
+            return (True, 'Ok')
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::update_acls: failed to update acls ({e})')
-        
-        return False
+            return (False, f'irc::update_acls: failed to update acls ({e})')
 
     def group_add(self, who, group):
         self.db.probe()
@@ -647,7 +660,11 @@ class ghbot(ircbot):
 
         check_user  = '(not given)'
 
-        # print('GREP', channel, command, prefix, splitted_args)
+        if channel == self.nick:
+            channel = prefix
+
+            if '!' in channel:
+                channel = channel[0:channel.find('!')]
 
         if splitted_args != None and len(splitted_args) >= 2:
             if len(splitted_args) >= 3:  # addacl
@@ -791,9 +808,13 @@ class ghbot(ircbot):
                 self.invoke_who_and_wait(user_to_update)
 
                 if user_to_update in self.users:
-                    self.update_acls(user_to_update, self.users[user_to_update])
+                    ok, error_text = self.update_acls(user_to_update, self.users[user_to_update])
 
-                    self.send_ok(channel, f'User {user_to_update} updated to {self.users[user_to_update]}')
+                    if ok:
+                        self.send_ok(channel, f'User {user_to_update} updated to {self.users[user_to_update]}')
+
+                    else:
+                        self.send_error(channel, error_text)
 
                 else:
                     self.send_error(channel, f'User {user_to_update} is not known')

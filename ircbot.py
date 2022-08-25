@@ -80,6 +80,9 @@ class ircbot(threading.Thread):
 
     # TODO: more
     def send_notice(self, channel, text):
+        if channel[0] == '\\':
+            channel = channel[1:]
+
         self.send(f'NOTICE {channel} :{text}')
 
     def send_ok(self, channel, text):
@@ -91,12 +94,18 @@ class ircbot(threading.Thread):
             self.send_more(channel)
 
         else:
+            if channel[0] == '\\':
+                channel = channel[1:]
+
             self.send(f'PRIVMSG {channel} :{text}')
 
             self.more[channel] = ''
 
     def send_more(self, channel):
-        if self.more[channel] == '':
+        if not channel in self.more or self.more[channel] == '':
+            if channel[0] == '\\':
+                channel = channel[1:]
+
             self.send(f'PRIVMSG {channel} :No more ~more')
 
         else:
@@ -115,10 +124,16 @@ class ircbot(threading.Thread):
 
             n = math.ceil(len(self.more[channel]) / 350)
 
+            if channel[0] == '\\':
+                channel = channel[1:]
+
             self.send(f'PRIVMSG {channel} :{current_more} ({n} ~more)')
 
     # TODO: more
     def send_error(self, channel, text):
+        if channel[0] == '\\':
+            channel = channel[1:]
+
         print(f'ERROR: {channel}|{text}')
 
         self.send(f'PRIVMSG {channel} :ERROR: {text}')
@@ -126,6 +141,9 @@ class ircbot(threading.Thread):
     # TODO: more
     def send_error_notice(self, channel, text):
         print(f'ERROR: {channel}|{text}')
+
+        if channel[0] == '\\':
+            channel = channel[1:]
 
         self.send(f'NOTICE {channel} :ERROR: {text}')
 
@@ -263,8 +281,6 @@ class ircbot(threading.Thread):
                 channel = args[0]
                 text    = args[1]
 
-                print(channel, text, self.cmd_prefix)
-
                 if text[0] == self.cmd_prefix:
                     is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix)
 
@@ -288,14 +304,26 @@ class ircbot(threading.Thread):
                     if not command in self.plugins:
                         nick = prefix.split('!')[0].lower()
 
+                        method = self.send_error_notice
+
+                        if channel == self.nick:
+                            channel = prefix
+
+                            if '!' in channel:
+                                channel = channel[0:channel.find('!')]
+
+                            method = self.send_error
+
                         if command in self.plugins_gone:
-                            self.send_error_notice(channel, f'{nick}: command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
+                            method(channel, f'{nick}: command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
 
                         else:
-                            self.send_error_notice(channel, f'{nick}: command "{command}" is not known')
+                            method(channel, f'{nick}: command "{command}" is not known')
 
                     else:
                         access_granted, group_for_command = self.check_acls(prefix, command)
+
+                        response_channel = (prefix[0:prefix.find('!')] if '!' in prefix else prefix) if channel == self.nick else channel
 
                         if access_granted:
                             # returns False when the command is not internal
@@ -305,16 +333,25 @@ class ircbot(threading.Thread):
                                 pass
 
                             elif rc == self.internal_command_rc.NOT_INTERNAL:
-                                self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/{command}', text)
+                                if channel == self.nick:
+                                    person = prefix
+
+                                    if '!' in person:
+                                        person = person[0:person.find('!')]
+
+                                    self.mqtt.publish(f'from/irc/\\{person}/{prefix}/{command}', text)
+
+                                else:
+                                    self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/{command}', text)
 
                             elif rc == self.internal_command_rc.ERROR:
                                 pass
 
                             else:
-                                self.send_error(channel, f'irc::run: unexpected return code from internal commands handler ({rc})')
+                                self.send_error(response_channel, f'irc::run: unexpected return code from internal commands handler ({rc})')
 
                         else:
-                            self.send_error(channel, f'Command "{command}" denied for user "{prefix}", one must be in {group_for_command}')
+                            self.send_error(response_channel, f'Command "{command}" denied for user "{prefix}", one must be in {group_for_command}')
 
                 else:
                     self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/message', args[1])
