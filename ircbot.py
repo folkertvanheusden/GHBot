@@ -198,7 +198,7 @@ class ircbot(threading.Thread):
                     self._set_state(self.session_state.DISCONNECTING)
 
             elif command == '352':  # reponse to 'WHO'
-                print(prefix, command, args)
+                #print(prefix, command, args)
                 self.users[args[5].lower()] = f'{args[5]}!{args[2]}@{args[3]}'
 
             elif command == '353':  # users in the channel
@@ -233,7 +233,7 @@ class ircbot(threading.Thread):
             self.users[prefix.split('!')[0].lower()] = prefix.lower()
 
         elif command == 'PART' or command == 'QUIT':
-            print(prefix, command)
+            #print(prefix, command)
             nick = prefix.split('!')[0].lower()
 
             if nick in self.users:
@@ -262,7 +262,7 @@ class ircbot(threading.Thread):
 
                 self.users[new_user] = new_prefix
 
-                print(f'{old_lower_prefix} => {new_prefix}')
+                #print(f'{old_lower_prefix} => {new_prefix}')
 
             except Exception as e:
                 self.send_error(self.error_ch, f'irc::handle_irc_command: exception "{e}" during execution of IRC command NICK at line number: {e.__traceback__.tb_lineno}')
@@ -275,7 +275,7 @@ class ircbot(threading.Thread):
                 self.send(f'PONG')
 
         elif command == 'PRIVMSG':
-            print(args)
+            #print(args)
 
             if len(args) >= 2 and len(args[1]) >= 2:
                 channel = args[0]
@@ -482,7 +482,7 @@ class ircbot(threading.Thread):
                 takes = time.time() - self.state_since
 
                 if takes > ircbot.state_timeout:
-                    print(f'irc::run: state {self.state} timeout ({takes} > {ircbot.state_timeout})')
+                    #print(f'irc::run: state {self.state} timeout ({takes} > {ircbot.state_timeout})')
 
                     self._set_state(self.session_state.DISCONNECTING)
 

@@ -235,7 +235,7 @@ class ghbot(ircbot):
 
             parts = topic.split('/')
 
-            print(self.pm_topic, topic, '|', parts)
+            # print(self.pm_topic, topic, '|', parts)
 
             if msg.find('\n') != -1 or msg.find('\r') != -1:
                 print(f'irc::_recv_msg_cb: invalid content to send for {topic}')
@@ -841,7 +841,13 @@ class ghbot(ircbot):
                     self.send_error(channel, f'Cannot override internal/plugin commands')
 
                 else:
-                    rc, nr = self.add_define(splitted_args[1], command == 'alias', ' '.join(splitted_args[2:]))
+                    is_alias      = command == 'alias'
+                    also_known_as = ' '.join(splitted_args[2:])
+
+                    if is_alias and also_known_as[0] == '!':
+                        also_known_as = also_known_as[1:]
+
+                    rc, nr = self.add_define(splitted_args[1], is_alias, also_known_as)
 
                     if rc == True:
                         self.send_ok(channel, f'{command} added (number: {nr})')
