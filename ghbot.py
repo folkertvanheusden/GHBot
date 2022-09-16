@@ -89,6 +89,10 @@ class ghbot(ircbot):
 
         self.topic_register = f'to/bot/register'  # topic where plugins announce themselves
 
+        self.topic_request = f'to/bot/request'  # topic where plugins request bot-actions
+
+        self.mqtt.subscribe(self.topic_request, self._recv_msg_cb)
+
         for topic in self.topic_privmsg:
             self.mqtt.subscribe(topic, self._recv_msg_cb)
 
@@ -123,9 +127,6 @@ class ghbot(ircbot):
         self.plugin_cleaner = threading.Thread(target=self._plugin_cleaner)
         self.plugin_cleaner.start()
 
-        self.topic_announcer = threading.Thread(target=self._topic_announcer)
-        self.topic_announcer.start()
-
         # ask plugins to register themselves so that we know which
         # commands are available (and what they're for etc.)
         self._plugin_command('register')
@@ -155,17 +156,6 @@ class ghbot(ircbot):
                     self.plugins_gone[plugin] = now
 
                 self.plugins_lock.release()
-
-            except Exception as e:
-                print(f'_plugin_cleaner: failed to clean: {e}')
-
-    def _topic_announcer(self):
-        while True:
-            try:
-                time.sleep(2.5)
-
-                for channel in self.topics:
-                    self.mqtt.publish(f'from/irc/{channel}/topic', self.topics[channel])
 
             except Exception as e:
                 print(f'_plugin_cleaner: failed to clean: {e}')
@@ -227,6 +217,10 @@ class ghbot(ircbot):
 
         self.plugins_lock.release()
 
+    def _send_topics_to_plugins():
+        for channel in self.topics:
+            self.mqtt.publish(f'from/irc/{channel}/topic', self.topics[channel])
+
     def _recv_msg_cb(self, topic, msg):
         try:
             # print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
@@ -250,6 +244,10 @@ class ghbot(ircbot):
 
             elif topic in self.topic_topic:
                 self.send(f'TOPIC #{parts[2]} :{msg}')
+
+            elif toic in self.topic_request:
+                if msg == 'topics':
+                    self._send_topics_to_plugins()
 
             elif topic in self.topic_register:
                 self._register_plugin(msg)
