@@ -13,4 +13,7 @@ ghbot.py is the main program.
 You may want to install python3-mysqldb and python3-paho-mqtt
 
 
+See https://nurdspace.nl/GHBot for more documentation.
+
+
 (c) 2022 by Folkert van Heusden <mail@vanheusden.com>

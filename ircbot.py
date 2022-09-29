@@ -23,13 +23,17 @@ class ircbot(threading.Thread):
 
     state_timeout = 30         # state changes must not take longer than this
 
-    def __init__(self, host, port, nick, channel):
+    def __init__(self, host, port, nick, channels):
         super().__init__()
 
         self.host        = host
         self.port        = port
         self.nick        = nick
-        self.channel     = channel
+        self.channels    = channels
+
+        self.error_ch    = self.channels[0]  # make configurable TODO
+
+        self.joined_ch   = dict()
 
         self.fd          = None
 
@@ -40,7 +44,14 @@ class ircbot(threading.Thread):
 
         self.cond_352    = threading.Condition()
 
-        self.more        = ''
+        self.more        = dict()
+
+        self.topics      = dict()
+
+        for channel in channels:
+            self.more[channel] = ''
+
+            self.joined_ch[channel] = False
 
     def _set_state(self, s):
         print(f'_set_state: state changes from {self.state} to {s}')
@@ -67,48 +78,74 @@ class ircbot(threading.Thread):
 
         return False
 
-    def send_ok(self, text):
-        print(f'OK: {text}')
+    # TODO: more
+    def send_notice(self, channel, text):
+        if channel[0] == '\\':
+            channel = channel[1:]
 
-        # 200 is arbitrary: does the irc server give a hint on this value?
-        if len(text) > 200:
-            self.more = text[200:]
+        self.send(f'NOTICE {channel} :{text}')
 
-            n = math.ceil(len(self.more) / 200)
+    def send_ok(self, channel, text):
+        print(f'OK: {channel}|{text}')
 
-            self.send(f'PRIVMSG {self.channel} :{text[0:200]} ({n} ~more)')
+        if len(text) > 350:
+            self.more[channel] = text
 
-        else:
-            self.send(f'PRIVMSG {self.channel} :{text}')
-
-            self.more = ''
-
-    def send_more(self):
-        if self.more == '':
-            self.send(f'PRIVMSG {self.channel} :No more ~more')
+            self.send_more(channel)
 
         else:
-            space = self.more.find(' ', 190, 200)
+            if channel[0] == '\\':
+                channel = channel[1:]
+
+            self.send(f'PRIVMSG {channel} :{text}')
+
+            self.more[channel] = ''
+
+    def send_more(self, channel):
+        if not channel in self.more or self.more[channel] == '':
+            if channel[0] == '\\':
+                channel = channel[1:]
+
+            self.send(f'PRIVMSG {channel} :No more ~more')
+
+        else:
+            space = self.more[channel].find(' ', 300, 350)
 
             if space == -1:
-                space = 200
+                space = 325
 
-            current_more = self.more[0:space].strip()
+            current_more = self.more[channel][0:space].strip()
 
-            if len(self.more) > space:
-                self.more = self.more[space:].strip()
+            if len(self.more[channel]) > space:
+                self.more[channel] = self.more[channel][space:].strip()
 
             else:
-                self.more = ''
+                self.more[channel] = ''
 
-            n = math.ceil(len(self.more) / 200)
+            n = math.ceil(len(self.more[channel]) / 350)
 
-            self.send(f'PRIVMSG {self.channel} :{current_more} ({n} ~more)')
+            if channel[0] == '\\':
+                channel = channel[1:]
 
-    def send_error(self, text):
-        print(f'ERROR: {text}')
+            self.send(f'PRIVMSG {channel} :{current_more} ({n} ~more)')
 
-        self.send(f'PRIVMSG {self.channel} :ERROR: {text}')
+    # TODO: more
+    def send_error(self, channel, text):
+        if channel[0] == '\\':
+            channel = channel[1:]
+
+        print(f'ERROR: {channel}|{text}')
+
+        self.send(f'PRIVMSG {channel} :ERROR: {text}')
+
+    # TODO: more
+    def send_error_notice(self, channel, text):
+        print(f'ERROR: {channel}|{text}')
+
+        if channel[0] == '\\':
+            channel = channel[1:]
+
+        self.send(f'NOTICE {channel} :ERROR: {text}')
 
     def parse_irc_line(self, s):
         # from https://stackoverflow.com/questions/930700/python-parsing-irc-messages
@@ -146,7 +183,7 @@ class ircbot(threading.Thread):
             with self.cond_352:
                 self.cond_352.wait(5.0 - t_diff)
 
-    def invoke_internal_commands(self, prefix, command, splitted_args):
+    def invoke_internal_commands(self, prefix, command, splitted_args, channel):
         return self.internal_command_rc.NOT_INTERNAL
 
     def handle_irc_commands(self, prefix, command, args):
@@ -161,13 +198,17 @@ class ircbot(threading.Thread):
                     self._set_state(self.session_state.DISCONNECTING)
 
             elif command == '352':  # reponse to 'WHO'
-                self.users[args[5]] = f'{args[5]}!{args[2]}@{args[3]}'
-
-                print(f'{args[5]} is {self.users[args[5]]}')
+                #print(prefix, command, args)
+                self.users[args[5].lower()] = f'{args[5]}!{args[2]}@{args[3]}'
 
             elif command == '353':  # users in the channel
                 for user in args[3].split(' '):
-                    self.users[user] = '?'
+                    self.users[user.lower()] = '?'
+
+            elif command == '331' or command == '332':  # no topic set / topic
+                self.topics[args[1][1:]] = args[2]
+
+                self.mqtt.publish(f'from/irc/{args[1][1:]}/topic', args[2])
 
             # 315 is 'end of who'
             if command == '352' or command == '315':
@@ -176,32 +217,55 @@ class ircbot(threading.Thread):
 
         elif command == 'JOIN':
             if self.state == self.session_state.CONNECTED_WAIT:
-                self._set_state(self.session_state.RUNNING)
+                self.joined_ch[args[0]] = True
 
-            self.users[prefix.split('!')[0]] = prefix.lower()
+                all_joined = True
 
-        elif command == 'PART':
-            del self.users[prefix.split('!')[0]]
+                for channel in self.joined_ch:
+                    if self.joined_ch[channel] == False:
+                        all_joined = False
+
+                        break
+
+                if all_joined:
+                    self._set_state(self.session_state.RUNNING)
+
+            self.users[prefix.split('!')[0].lower()] = prefix.lower()
+
+        elif command == 'PART' or command == 'QUIT':
+            #print(prefix, command)
+            nick = prefix.split('!')[0].lower()
+
+            if nick in self.users:
+                del self.users[nick]
 
         elif command == 'KICK':
-            del self.users[args[1]]
+            nick = args[1].lower()
+
+            if nick in self.users:
+                del self.users[nick]
 
         elif command == 'NICK':
-            old_lower_prefix = prefix.lower()
+            try:
+                old_lower_prefix = prefix.lower()
 
-            excl_mark    = old_lower_prefix.find('!')
+                excl_mark    = old_lower_prefix.find('!')
 
-            old_user     = old_lower_prefix[0:excl_mark]
+                old_user     = old_lower_prefix[0:excl_mark]
 
-            del self.users[old_user]
-        
-            new_user     = args[0]
+                if old_user in self.users:
+                    del self.users[old_user]
+            
+                new_user     = args[0].lower()
 
-            new_prefix   = new_user + old_lower_prefix[excl_mark:]
+                new_prefix   = new_user + old_lower_prefix[excl_mark:]
 
-            self.users[new_user] = new_prefix
+                self.users[new_user] = new_prefix
 
-            print(f'{old_lower_prefix} => {new_prefix}')
+                #print(f'{old_lower_prefix} => {new_prefix}')
+
+            except Exception as e:
+                self.send_error(self.error_ch, f'irc::handle_irc_command: exception "{e}" during execution of IRC command NICK at line number: {e.__traceback__.tb_lineno}')
 
         elif command == 'PING':
             if len(args) >= 1:
@@ -211,15 +275,22 @@ class ircbot(threading.Thread):
                 self.send(f'PONG')
 
         elif command == 'PRIVMSG':
+            #print(args)
+
             if len(args) >= 2 and len(args[1]) >= 2:
-                text = args[1]
+                channel = args[0]
+                text    = args[1]
 
                 if text[0] == self.cmd_prefix:
-                    is_command, new_text = self.check_aliasses(text[1:], prefix)
+                    is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix)
 
                     if new_text != None:
                         if not is_command:
-                            self.send_ok(new_text)
+                            if is_notice:
+                                self.send_notice(channel, new_text)
+
+                            else:
+                                self.send_ok(channel, new_text)
 
                             return
 
@@ -231,33 +302,76 @@ class ircbot(threading.Thread):
                     command = parts[0]
 
                     if not command in self.plugins:
-                        self.send_error(f'Command "{command}" is not known')
+                        nick = prefix.split('!')[0].lower()
 
-                    elif self.check_acls(prefix, command):
-                        # returns False when the command is not internal
-                        rc = self.invoke_internal_commands(prefix, command, parts)
+                        method = self.send_error_notice
 
-                        if rc == self.internal_command_rc.HANDLED:
-                            pass
+                        if channel == self.nick:
+                            channel = prefix
 
-                        elif rc == self.internal_command_rc.NOT_INTERNAL:
-                            self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/{command}', text)
+                            if '!' in channel:
+                                channel = channel[0:channel.find('!')]
 
-                        elif rc == self.internal_command_rc.ERROR:
-                            pass
+                            method = self.send_error
+
+                        if command in self.plugins_gone:
+                            method(channel, f'{nick}: command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
 
                         else:
-                            self.send_error(f'irc::run: unexpected return code from internal commands handler ({rc})')
+                            method(channel, f'{nick}: command "{command}" is not known')
 
                     else:
-                        self.send_error(f'Command "{command}" denied for user "{prefix}"')
+                        access_granted, group_for_command = self.check_acls(prefix, command)
+
+                        response_channel = (prefix[0:prefix.find('!')] if '!' in prefix else prefix) if channel == self.nick else channel
+
+                        if access_granted:
+                            # returns False when the command is not internal
+                            rc = self.invoke_internal_commands(prefix, command, parts, channel)
+
+                            if rc == self.internal_command_rc.HANDLED:
+                                pass
+
+                            elif rc == self.internal_command_rc.NOT_INTERNAL:
+                                if channel == self.nick:
+                                    person = prefix
+
+                                    if '!' in person:
+                                        person = person[0:person.find('!')]
+
+                                    self.mqtt.publish(f'from/irc/\\{person}/{prefix}/{command}', text)
+
+                                else:
+                                    self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/{command}', text)
+
+                            elif rc == self.internal_command_rc.ERROR:
+                                pass
+
+                            else:
+                                self.send_error(response_channel, f'irc::run: unexpected return code from internal commands handler ({rc})')
+
+                        else:
+                            self.send_error(response_channel, f'Command "{command}" denied for user "{prefix}", one must be in {group_for_command}')
 
                 else:
-                    self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/message', args[1])
+                    self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/message', args[1])
 
         elif command == 'NOTICE':
             if len(args) >= 2:
                 self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/notice', args[1])
+
+        elif command == 'TOPIC':
+            self.topics[args[0][1:]] = args[1]
+
+            self.mqtt.publish(f'from/irc/{args[0][1:]}/topic', args[1])
+
+        elif command == 'INVITE':
+            # do not enter any channel, only the selected
+            for channel in self.channels:
+                if self.send(f'JOIN {channel}') == False:
+                    self._set_state(self.session_state.DISCONNECTING)
+
+                    break
 
         else:
             print(f'irc::run: command "{command}" is not known (for {prefix})')
@@ -271,7 +385,7 @@ class ircbot(threading.Thread):
                 self.handle_irc_commands(prefix, command, arguments)
 
         except Exception as e:
-            self.send_error(f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}" at line number: {e.__traceback__.tb_lineno}')
+            self.send_error(self.error_ch, f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}" at line number: {e.__traceback__.tb_lineno}')
 
             traceback.print_exc(file=sys.stdout)
 
@@ -301,7 +415,7 @@ class ircbot(threading.Thread):
                     self._set_state(self.session_state.CONNECTED_NICK)
 
                 except Exception as e:
-                    self.send_error(f'irc::run: failed to connect: {e}')
+                    print(f'irc::run: failed to connect: {e}')
                     
                     self.fd.close()
 
@@ -315,7 +429,15 @@ class ircbot(threading.Thread):
                     self._set_state(self.session_state.USER_WAIT)
 
             elif self.state == self.session_state.CONNECTED_JOIN:
-                if self.send(f'JOIN {self.channel}'):
+                all_ok = True
+
+                for channel in self.channels:
+                    if self.send(f'JOIN {channel}') == False:
+                        all_ok = False
+
+                        break
+
+                if all_ok:
                     self._set_state(self.session_state.CONNECTED_WAIT)
 
             elif self.state == self.session_state.USER_WAIT:
@@ -340,7 +462,7 @@ class ircbot(threading.Thread):
                         buffer += self.fd.recv(4096).decode('utf-8')
 
                     except Exception as e:
-                        self.send_error(f'irc::run: cannot decode text from irc-server')
+                        print(f'irc::run: cannot decode text from irc-server')
 
                     lf_index = buffer.find('\n')
 
@@ -360,7 +482,7 @@ class ircbot(threading.Thread):
                 takes = time.time() - self.state_since
 
                 if takes > ircbot.state_timeout:
-                    print(f'irc::run: state {self.state} timeout ({takes} > {ircbot.state_timeout})')
+                    #print(f'irc::run: state {self.state} timeout ({takes} > {ircbot.state_timeout})')
 
                     self._set_state(self.session_state.DISCONNECTING)
 
