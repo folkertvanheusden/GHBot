@@ -217,7 +217,7 @@ class ghbot(ircbot):
 
         self.plugins_lock.release()
 
-    def _send_topics_to_plugins():
+    def _send_topics_to_plugins(self):
         for channel in self.topics:
             self.mqtt.publish(f'from/irc/{channel}/topic', self.topics[channel])
 
@@ -228,8 +228,6 @@ class ghbot(ircbot):
             topic = topic[len(self.mqtt.get_topix_prefix()):]
 
             parts = topic.split('/')
-
-            # print(self.pm_topic, topic, '|', parts)
 
             if msg.find('\n') != -1 or msg.find('\r') != -1:
                 print(f'irc::_recv_msg_cb: invalid content to send for {topic}')
@@ -245,7 +243,8 @@ class ghbot(ircbot):
             elif topic in self.topic_topic:
                 self.send(f'TOPIC #{parts[2]} :{msg}')
 
-            elif toic in self.topic_request:
+            elif topic in self.topic_request:
+                print(f'plugin requested {msg}')
                 if msg == 'topics':
                     self._send_topics_to_plugins()
 
