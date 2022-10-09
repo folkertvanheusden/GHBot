@@ -55,6 +55,7 @@ class ghbot(ircbot):
         self.plugins['alias']    = ['Add a different name for a command, format: !alias <newname> <oldname>', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['searchdefine'] = ['Search for defines that match a partial text', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['searchalias'] = ['Search for aliases that match a partial text', None, now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['viewalias'] = ['Show what an alias is doing', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['apro']     = ['Show commands that match a partial text', None, now, 'Flok', 'harkbot.vm.nurd.space']
@@ -568,7 +569,7 @@ class ghbot(ircbot):
         cursor = self.db.db.cursor()
 
         try:
-            cursor.execute('SELECT command, nr FROM aliasses WHERE command like %s ORDER BY nr DESC', (f'%%{what.lower()}%%', ))
+            cursor.execute('SELECT command, nr, replacement_text FROM aliasses WHERE nr=%s OR command like %s ORDER BY nr DESC', (what, f'%%{what.lower()}%%',))
 
             results = []
 
@@ -872,6 +873,21 @@ class ghbot(ircbot):
                         defines += f'{entry[0]}: {entry[1]}'
 
                     self.send_ok(channel, defines)
+
+                else:
+                    self.send_error(channel, 'None found')
+
+            else:
+                self.send_error(channel, f'{command} missing arguments')
+
+        elif command == 'viewalias':
+            if len(splitted_args) >= 2:
+                found = self.search_define(splitted_args[1])
+
+                if found != None:
+                    rc = f'{splitted_args[1]}: {found[0][2]}'
+
+                    self.send_ok(channel, rc)
 
                 else:
                     self.send_error(channel, 'None found')
