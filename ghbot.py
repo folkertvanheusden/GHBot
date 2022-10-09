@@ -355,7 +355,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return (True, 'Ok')
+            if cursor.rowcount == 1:
+                return (True, 'Ok')
+
+            return (False, 'That command/nick combination was not known')
 
         except Exception as e:
             return (False, f'irc::del_acl: failed to delete acl ({e})')
@@ -367,12 +370,17 @@ class ghbot(ircbot):
 
         try:
             cursor.execute('DELETE FROM acls WHERE who LIKE %s', (match_,))
+            any_del = cursor.rowcount == 1
 
             cursor.execute('DELETE FROM acl_groups WHERE who LIKE %s', (match_,))
+            any_del |= cursor.rowcount == 1
 
             self.db.db.commit()
 
-            return (True, 'Ok')
+            if any_del:
+                return (True, 'Ok')
+
+            return (False, 'No acls found for that nick')
 
         except Exception as e:
             return (False, f'irc::forget_acls: failed to forget acls for {match_}: {e}')
@@ -438,7 +446,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return (True, 'Ok')
+            if cursor.rowcount == 1:
+                return (True, 'Ok')
+
+            return (False, 'That user/group combination was not known')
 
         except Exception as e:
             return (False, f'irc::group-del: failed to delete group-member ({e}, {e.__traceback__.tb_lineno})')
