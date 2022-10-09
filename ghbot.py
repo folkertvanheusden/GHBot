@@ -340,12 +340,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return True
+            return (True, 'Ok')
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::add_acl: failed to insert acl ({e})')
-
-        return False
+            return (False, f'irc::add_acl: failed to insert acl ({e})')
 
     def del_acl(self, who, command):
         self.db.probe()
@@ -357,12 +355,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return True
+            return (True, 'Ok')
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::del_acl: failed to delete acl ({e})')
-        
-        return False
+            return (False, f'irc::del_acl: failed to delete acl ({e})')
 
     def forget_acls(self, who):
         match_ = who + '!%'
@@ -376,12 +372,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return True
+            return (True, 'Ok')
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::forget_acls: failed to forget acls for {match_}: {e}')
-        
-        return False
+            return (False, f'irc::forget_acls: failed to forget acls for {match_}: {e}')
 
     def clone_acls(self, from_, to_):
         cursor = self.db.db.cursor()
@@ -394,12 +388,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return None
+            return (True, 'Ok')
 
         except Exception as e:
-            return f'failed to clone acls: {e}'
-        
-        return 'Unexpected situation'
+            return (False, f'failed to clone acls: {e}')
 
     # new_fullname is the new 'nick!user@host'
     def update_acls(self, who, new_fullname):
@@ -431,12 +423,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return True
+            return (True, 'Ok')
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::group_add: failed to insert group-member ({e})')
-
-        return False
+            return (False, f'irc::group_add: failed to insert group-member ({e})')
 
     def group_del(self, who, group):
         self.db.probe()
@@ -448,12 +438,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return True
+            return (True, 'Ok')
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::group-del: failed to delete group-member ({e})')
-
-        return False
+            return (False, f'irc::group-del: failed to delete group-member ({e}, {e.__traceback__.tb_lineno})')
 
     def check_user_known(self, user):
         if '!' in user:
@@ -485,7 +473,7 @@ class ghbot(ircbot):
                 return True
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::is_group: failed to query database for group {group} ({e})')
+            send_notice(self.owner, f'irc::is_group: failed to query database for group {group} ({e})')
 
         return False
 
@@ -536,12 +524,10 @@ class ghbot(ircbot):
 
             self.db.db.commit()
 
-            return (True, cursor.lastrowid)
+            return (True, cursor.lastrowid, 'Ok')
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::add_define: failed to insert alias ({e})')
-
-        return (False, -1)
+            return (False, -1, f'irc::add_define: failed to insert alias ({e})')
 
     def del_define(self, nr):
         self.db.probe()
@@ -554,14 +540,12 @@ class ghbot(ircbot):
             self.db.db.commit()
 
             if cursor.rowcount == 1:
-                return True
+                return (True, 'Ok')
 
-            self.send_error(self.error_ch, f'irc::del_define: unexpected affected rows count {cursor.rowcount}')
+            return (False, f'irc::del_define: unexpected affected rows count {cursor.rowcount}')
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::del_define: failed to delete alias {nr} ({e})')
-
-        return False
+            return (False, f'irc::del_define: failed to delete alias {nr} ({e})')
 
     def search_define(self, what):
         self.db.probe()
@@ -579,12 +563,12 @@ class ghbot(ircbot):
             cursor.close()
 
             if len(results) > 0:
-                return results
+                return (results, True, 'Ok')
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::del_define: failed to delete alias {nr} ({e})')
+            return (None, False, f'irc::del_define: failed to delete alias {nr} ({e})')
 
-        return None
+        return (None, True, 'None')
 
     def escapes(self, text):
         if '%R' in text:
@@ -704,12 +688,15 @@ class ghbot(ircbot):
             if group_idx != None:
                 group_name = splitted_args[group_idx + 1]
 
-                if self.group_add(identifier, group_name):  # who, group
+                rc = self.group_add(identifier, group_name)  # who, group
+                if rc[0]:
                     self.send_ok(channel, f'User {identifier} added to group {group_name}')
 
                     return self.internal_command_rc.HANDLED
 
                 else:
+                    self.send_error(channel, rc[1])
+
                     return self.internal_command_rc.ERROR
 
             elif cmd_idx != None:
@@ -722,13 +709,14 @@ class ghbot(ircbot):
                 self.plugins_lock.release()
 
                 if plugin_known:
-                    if self.add_acl(identifier, cmd_name):  # who, command
+                    rc = self.add_acl(identifier, cmd_name)  # who, command
+                    if rc[0]:  # who, command
                         self.send_ok(channel, f'ACL added for user or group {identifier} for command {cmd_name}')
 
                         return self.internal_command_rc.HANDLED
 
                     else:
-                        self.send_error(channel, 'Failed to add ACL - did it exist already?')
+                        self.send_error(channel, f'Failed to add ACL - did it exist already? ({rc[1]})')
 
                         return self.internal_command_rc.ERROR
 
@@ -756,27 +744,33 @@ class ghbot(ircbot):
             if group_idx != None:
                 group_name = splitted_args[group_idx + 1]
 
-                if self.group_del(identifier, group_name):  # who, group
+                rc = self.group_del(identifier, group_name)  # who, group
+                if rc[0]:  # who, group
                     self.send_ok(channel, f'User {identifier} removed from group {group_name}')
 
                     return self.internal_command_rc.HANDLED
 
                 else:
+                    self.send_error(channel, rc[1])
+
                     return self.internal_command_rc.ERROR
 
             elif cmd_idx != None:
                 cmd_name = splitted_args[cmd_idx + 1]
 
-                if self.del_acl(identifier, cmd_name):  # who, command
+                rc = self.del_acl(identifier, cmd_name)  # who, command
+                if rc[0]:  # who, command
                     self.send_ok(channel, f'ACL removed for user {identifier} for command {cmd_name}')
 
                     return self.internal_command_rc.HANDLED
 
                 else:
+                    self.send_error(channel, f'Failed to delete ACL ({rc[1]})')
+
                     return self.internal_command_rc.ERROR
 
             else:
-                self.send_error(channel, f'Usage: delacl <user> group|cmd <group-name|cmd-name>')
+                self.send_error(channel, f'Usage: delacl user <user> group|cmd <group-name|cmd-name>')
 
                 return self.internal_command_rc.ERROR
 
@@ -845,20 +839,20 @@ class ghbot(ircbot):
                     if is_alias and also_known_as[0] == '!':
                         also_known_as = also_known_as[1:]
 
-                    rc, nr = self.add_define(splitted_args[1], is_alias, also_known_as)
+                    rc, nr, err = self.add_define(splitted_args[1], is_alias, also_known_as)
 
                     if rc == True:
                         self.send_ok(channel, f'{command} added (number: {nr})')
 
                     else:
-                        self.send_error(channel, f'Failed to add {command}')
+                        self.send_error(channel, f'Failed to add {command}: {err}')
 
             else:
                 self.send_error(channel, f'{command} missing arguments')
 
         elif command == 'searchdefine' or command == 'searchalias':
             if len(splitted_args) >= 2:
-                found = self.search_define(splitted_args[1])
+                found, ok, err = self.search_define(splitted_args[1])
 
                 if found != None:
                     defines = None
@@ -874,23 +868,29 @@ class ghbot(ircbot):
 
                     self.send_ok(channel, defines)
 
-                else:
+                elif ok:
                     self.send_error(channel, 'None found')
+
+                else:
+                    self.send_error(channel, '{err}')
 
             else:
                 self.send_error(channel, f'{command} missing arguments')
 
         elif command == 'viewalias':
             if len(splitted_args) >= 2:
-                found = self.search_define(splitted_args[1])
+                found, ok, err = self.search_define(splitted_args[1])
 
                 if found != None:
                     rc = f'{splitted_args[1]}: {found[0][2]}'
 
                     self.send_ok(channel, rc)
 
-                else:
+                elif ok:
                     self.send_error(channel, 'None found')
+
+                else:
+                    self.send_error(channel, '{err}')
 
             else:
                 self.send_error(channel, f'{command} missing arguments')
@@ -900,13 +900,13 @@ class ghbot(ircbot):
                 try:
                     nr = int(splitted_args[1])
 
-                    rc = self.del_define(nr)
+                    rc, err = self.del_define(nr)
 
                     if rc == True:
                         self.send_ok(channel, f'Define {nr} deleted')
 
                     else:
-                        self.send_error(channel, f'Failed to delete {nr}')
+                        self.send_error(channel, f'Failed to delete {nr}: {err}')
 
                 except ValueError as ve:
                     self.send_error(channel, f'Parameter {splitted_args[1]} is not a number')
@@ -944,11 +944,16 @@ class ghbot(ircbot):
             if len(splitted_args) == 2:
                 user = splitted_args[1]
 
-                if not '%' in user and self.forget_acls(user):
+                if '%' in user:
+                    self.send_error(channel, f'User {user} not known or some other error')
+                    return self.internal_command_rc.ERROR
+
+                rc = self.forget_acls(user)
+                if rc[0]:
                     self.send_ok(channel, f'User {user} forgotten')
 
                 else:
-                    self.send_error(channel, f'User {user} not known or some other error')
+                    self.send_error(channel, f'User {user} not known or some other error ({rc[1]})')
 
             else:
                 self.send_error(channel, f'User not specified')
@@ -1088,14 +1093,20 @@ class ghbot(ircbot):
                 if which in plugin:
                     matching.add(plugin)
 
-            for alias_define in self.find_alias_define_by_substring(which):
-                matching.add(f'{alias_define[0]} ({alias_define[1]}, {alias_define[2]})')
+            rc, err = self.find_alias_define_by_substring(which)
 
-            if len(matching) == 0:
-                self.send_ok(channel, f'Nothing matches with "{which}"')
+            if err != None:
+                self.send_error(channel, f'Apro: {err}')
 
             else:
-                self.send_ok(channel, 'Try one of the following: ' + ', '.join(matching))
+                for alias_define in rc:
+                    matching.add(f'{alias_define[0]} ({alias_define[1]}, {alias_define[2]})')
+
+                if len(matching) == 0:
+                    self.send_ok(channel, f'Nothing matches with "{which}"')
+
+                else:
+                    self.send_ok(channel, f'Apro "{which}": ' + ', '.join(matching))
 
             return self.internal_command_rc.HANDLED
 
@@ -1154,12 +1165,10 @@ class ghbot(ircbot):
             for row in cursor:
                 rows.append((row[0], 'alias' if row[1] == 1 else 'define', row[2]))
 
-            return rows
+            return (rows, None)
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::add_define: failed to insert alias ({e})')
-
-        return [ ]
+            return (rows, f'irc::add_define: failed to insert alias ({e})')
 
     def irc_command_insertion_point(self, prefix, command, arguments):
         if command in [ 'JOIN', 'PART', 'KICK', 'NICK', 'QUIT' ]:

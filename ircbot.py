@@ -31,11 +31,11 @@ class ircbot(threading.Thread):
         self.nick        = nick
         self.channels    = channels
 
-        self.error_ch    = self.channels[0]  # make configurable TODO
-
         self.joined_ch   = dict()
 
         self.fd          = None
+
+        self.owner       = 'flok'
 
         self.state       = self.session_state.DISCONNECTED
         self.state_since = time.time()
@@ -265,7 +265,7 @@ class ircbot(threading.Thread):
                 #print(f'{old_lower_prefix} => {new_prefix}')
 
             except Exception as e:
-                self.send_error(self.error_ch, f'irc::handle_irc_command: exception "{e}" during execution of IRC command NICK at line number: {e.__traceback__.tb_lineno}')
+                send_notice(self.owner, f'irc::handle_irc_command: exception "{e}" during execution of IRC command NICK at line number: {e.__traceback__.tb_lineno}')
 
         elif command == 'PING':
             if len(args) >= 1:
@@ -385,7 +385,7 @@ class ircbot(threading.Thread):
                 self.handle_irc_commands(prefix, command, arguments)
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}" at line number: {e.__traceback__.tb_lineno}')
+            print(f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}" at line number: {e.__traceback__.tb_lineno}')
 
             traceback.print_exc(file=sys.stdout)
 
