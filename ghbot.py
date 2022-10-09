@@ -412,11 +412,18 @@ class ghbot(ircbot):
         try:
             cursor.execute('UPDATE acls SET who=%s WHERE who LIKE %s', (new_fullname, match_))
 
+            any_upd = cursor.rowcount == 1
+
             cursor.execute('UPDATE acl_groups SET who=%s WHERE who LIKE %s', (new_fullname, match_))
+
+            any_upd |= cursor.rowcount == 1
 
             self.db.db.commit()
 
-            return (True, 'Ok')
+            if any_upd:
+                return (True, 'Ok')
+
+            return (False, 'No such user')
 
         except Exception as e:
             return (False, f'irc::update_acls: failed to update acls ({e})')
