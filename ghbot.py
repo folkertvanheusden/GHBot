@@ -897,8 +897,8 @@ class ghbot(ircbot):
 
         elif command == 'merge':
             if splitted_args != None and len(splitted_args) == 3:
-                new_nick = splitted_args[1]
-                old_nick = splitted_args[2]
+                new_nick = splitted_args[1].lower()
+                old_nick = splitted_args[2].lower()
 
                 self.invoke_who_and_wait(new_nick)
 
@@ -912,7 +912,7 @@ class ghbot(ircbot):
                         self.send_error(channel, error_text)
 
                 else:
-                    self.send_error(channel, f'User {new_nick} is not known')
+                    self.send_error(channel, f'Merge: user {new_nick} is not known (to be merged with {old_nick})')
 
             else:
                 self.send_error(channel, f'Meet parameter(s) missing ({splitted_args} given)')
