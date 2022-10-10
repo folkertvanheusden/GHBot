@@ -47,6 +47,7 @@ class ghbot(ircbot):
         self.plugins['deluser']  = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['meet']     = ['Use this when a user (nick) has a new hostname: meet <nick>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['merge']    = ['Use this to add a host-alias for an existing user (nick): merge <new-nick> <old-nick>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['commands'] = ['Show list of known commands', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'Flok', 'harkbot.vm.nurd.space']
@@ -273,6 +274,20 @@ class ghbot(ircbot):
         except Exception as e:
             print(f'irc::_recv_msg_cb: exception {e} while processing {topic}|{msg} (at line number: {e.__traceback__.tb_lineno})')
 
+    def check_acl_alias(self, who):
+        with self.db.db.cursor() as cursor:
+            # see if this is an alias, then if so: pick main address
+            cursor.execute('SELECT main_account FROM account_aliasses WHERE account=%s', (who.lower(),))
+
+            row = cursor.fetchone()
+
+            if row != None:
+                who = row[0].lower()
+
+                print(f'Using ACL {who}')
+
+            return who
+
     def check_acls(self, who, command):
         self.plugins_lock.acquire()
 
@@ -289,6 +304,8 @@ class ghbot(ircbot):
         self.db.probe()  # to prevent those pesky "sever has gone away" problems
 
         cursor = self.db.db.cursor()
+
+        who = self.check_acl_alias(who)
 
         # check per user ACLs (can override group as defined in plugin)
         cursor.execute('SELECT COUNT(*) FROM acls WHERE command=%s AND who=%s', (command.lower(), who.lower()))
@@ -321,6 +338,8 @@ class ghbot(ircbot):
 
         cursor = self.db.db.cursor()
 
+        who = self.check_acl_alias(who)
+
         cursor.execute('SELECT DISTINCT item FROM (SELECT command AS item FROM acls WHERE who=%s UNION SELECT group_name AS item FROM acl_groups WHERE who=%s) AS in_ ORDER BY item', (who.lower(), who.lower()))
 
         out = []
@@ -334,6 +353,8 @@ class ghbot(ircbot):
         self.db.probe()
 
         cursor = self.db.db.cursor()
+
+        who = self.check_acl_alias(who)
 
         try:
             cursor.execute('INSERT INTO acls(command, who) VALUES(%s, %s)', (command.lower(), who.lower()))
@@ -349,6 +370,8 @@ class ghbot(ircbot):
         self.db.probe()
 
         cursor = self.db.db.cursor()
+
+        who = self.check_acl_alias(who)
 
         try:
             cursor.execute('DELETE FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
@@ -367,6 +390,8 @@ class ghbot(ircbot):
         match_ = who + '!%'
 
         cursor = self.db.db.cursor()
+
+        who = self.check_acl_alias(who)
 
         try:
             cursor.execute('DELETE FROM acls WHERE who LIKE %s', (match_,))
@@ -388,6 +413,8 @@ class ghbot(ircbot):
     def clone_acls(self, from_, to_):
         cursor = self.db.db.cursor()
 
+        who = self.check_acl_alias(who)
+
         try:
             cursor.execute('SELECT group_name FROM acl_groups WHERE who=%s', (from_,))
 
@@ -400,6 +427,38 @@ class ghbot(ircbot):
 
         except Exception as e:
             return (False, f'failed to clone acls: {e}')
+
+    def merge_nick(self, new_nick, old_nick):
+        cursor = self.db.db.cursor()
+
+        if '%' in old_nick or '%' in new_nick:
+            return (False, 'haxxxor')
+
+        match_ = old_nick if '!' in old_nick else (old_nick + '!%')
+
+        try:
+            cursor.execute('SELECT who FROM acl_groups WHERE who LIKE %s GROUP BY who', (match_,))
+
+            rows = cursor.fetchall()
+
+            if len(rows) == 0:
+                return (False, f'Old user ({old_nick}) is not known')
+
+            if len(rows) > 1:
+                full_names = [row[0] for row in rows]
+
+                return (False, f'Old user ({old_nick}) is ambiguous: {", ".join(full_names)}')
+
+            print(rows, new_nick)
+
+            cursor.execute('INSERT INTO account_aliasses(main_account, account) VALUES(%s, %s)', (rows[0][0], new_nick))
+
+            self.db.db.commit()
+
+            return (True, 'Ok')
+
+        except Exception as e:
+            return (False, f'failed to add alias: {e}, {e.__traceback__.tb_lineno}')
 
     # new_fullname is the new 'nick!user@host'
     def update_acls(self, who, new_fullname):
@@ -431,6 +490,8 @@ class ghbot(ircbot):
     def group_add(self, who, group):
         self.db.probe()
 
+        who = self.check_acl_alias(who)
+
         cursor = self.db.db.cursor()
 
         try:
@@ -445,6 +506,8 @@ class ghbot(ircbot):
 
     def group_del(self, who, group):
         self.db.probe()
+
+        who = self.check_acl_alias(who)
 
         cursor = self.db.db.cursor()
 
@@ -831,6 +894,28 @@ class ghbot(ircbot):
 
             else:
                 self.send_error(channel, f'Meet parameter missing ({splitted_args} given)')
+
+        elif command == 'merge':
+            if splitted_args != None and len(splitted_args) == 3:
+                new_nick = splitted_args[1]
+                old_nick = splitted_args[2]
+
+                self.invoke_who_and_wait(new_nick)
+
+                if new_nick in self.users:
+                    ok, error_text = self.merge_nick(self.users[new_nick], old_nick)
+
+                    if ok:
+                        self.send_ok(channel, f'Added alias for {old_nick}: {self.users[new_nick]}')
+
+                    else:
+                        self.send_error(channel, error_text)
+
+                else:
+                    self.send_error(channel, f'User {new_nick} is not known')
+
+            else:
+                self.send_error(channel, f'Meet parameter(s) missing ({splitted_args} given)')
 
         elif command == 'commands':
             plugins = self.list_plugins()
