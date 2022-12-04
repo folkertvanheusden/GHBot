@@ -14,6 +14,7 @@ import traceback
 class ircbot(threading.Thread):
     class session_state(Enum):
         DISCONNECTED   = 0x00  # setup socket, connect to host
+        CONNECTED_PASS = 0x01  # send PASS
         CONNECTED_NICK = 0x02  # send NICK
         CONNECTED_USER = 0x03  # send USER
         USER_WAIT      = 0x08  # wait for USER ack
@@ -24,12 +25,13 @@ class ircbot(threading.Thread):
 
     state_timeout = 30         # state changes must not take longer than this
 
-    def __init__(self, host, port, nick, channels):
+    def __init__(self, host, port, nick, password, channels):
         super().__init__()
 
         self.host        = host
         self.port        = port
         self.nick        = nick
+        self.password    = password
         self.channels    = channels
 
         self.joined_ch   = dict()
@@ -443,12 +445,16 @@ class ircbot(threading.Thread):
 
                     self.poller.register(self.fd, select.POLLIN)
 
-                    self._set_state(self.session_state.CONNECTED_NICK)
+                    self._set_state(self.session_state.CONNECTED_PASS)
 
                 except Exception as e:
                     print(f'irc::run: failed to connect: {e}')
                     
                     self.fd.close()
+
+            elif self.state == self.session_state.CONNECTED_PASS:
+                if self.send(f'PASS {self.password}'):
+                    self._set_state(self.session_state.CONNECTED_NICK)
 
             elif self.state == self.session_state.CONNECTED_NICK:
                 # apparently only error responses are returned, no acks

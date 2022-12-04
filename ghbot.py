@@ -23,8 +23,8 @@ class ghbot(ircbot):
         ERROR        = 0x10
         NOT_INTERNAL = 0xff
 
-    def __init__(self, host, port, nick, channels, m, db, cmd_prefix, local_plugin_subdir):
-        super().__init__(host, port, nick, channels)
+    def __init__(self, host, port, nick, password, channels, m, db, cmd_prefix, local_plugin_subdir):
+        super().__init__(host, port, nick, password, channels)
 
         self.cmd_prefix    = cmd_prefix
 
@@ -254,16 +254,21 @@ class ghbot(ircbot):
                 self._register_plugin(msg)
 
             elif parts[0] + '/' + parts[1] in self.topic_to_nick:
-                nick = parts[2]
+                if parts[-1].lower() == 'mode':
+                    self.send(f'MODE #{parts[2]} {msg}')
 
-                if nick[0] == '\\':
-                    nick = nick[1:]
+                else:
+                    nick = parts[2]
 
-                self.send(f'PRIVMSG {nick} :{msg}')
+                    if nick[0] == '\\':
+                        nick = nick[1:]
+
+                    self.send(f'PRIVMSG {nick} :{msg}')
 
             elif self.pm_topic in topic:
                 nick = parts[2][1:]  # remove '\'
 
+                print(f'PRIVMSG {nick} :{msg}')
                 self.send(f'PRIVMSG {nick} :{msg}')
 
             else:
@@ -1275,7 +1280,7 @@ db = dbi(config['db']['host'], config['db']['user'], config['db']['password'], c
 m = mqtt_handler(config['mqtt']['host'], config['mqtt']['prefix'])
 
 # host, port, nick, channel, m, db, command_prefix
-g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'], 'plugins')
+g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['password'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'], 'plugins')
 
 ka = irc_keepalive(g)
 
