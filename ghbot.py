@@ -620,6 +620,26 @@ class ghbot(ircbot):
             except Exception as e:
                 return (False, f'irc::del_define: failed to delete alias {nr} ({e})')
 
+    def similar_to(self, wrong):
+        results_parent = super().similar_to(wrong)
+
+        alias_best = None
+
+        self.db.probe()
+
+        with self.db.db.cursor() as cursor:
+            try:
+                cursor.execute('select command from aliasses where command sounds like %s', (wrong,))
+
+                row = cursor.fetchone()
+
+                alias_best = row[0]
+
+            except Exception as e:
+                pass
+
+        return (results_parent[0], results_parent[1], alias_best)
+
     def search_define(self, what):
         self.db.probe()
 
@@ -1015,13 +1035,9 @@ class ghbot(ircbot):
                     self.send_ok(channel, f'Command {cmd}: {self.plugins[cmd][0]} (group: {self.plugins[cmd][1]})')
 
                 else:
-                    suggestion = self.similar_to(cmd)
+                    suggestions = set([x for x in self.similar_to(cmd) if x != None])
 
-                    if suggestion[0] != suggestion[1]:
-                        self.send_error(channel, f'Command/plugin not known (maybe {suggestion[0]} or {suggestion[1]}?)')
-
-                    else:
-                        self.send_error(channel, f'Command/plugin not known (maybe {suggestion[0]}?)')
+                    self.send_error(channel, f'Command/plugin not known (maybe {" or ".join(suggestions)}?)')
 
                 self.plugins_lock.release()
 
@@ -1192,7 +1208,9 @@ class ghbot(ircbot):
                     matching.add(f'{alias_define[0]} ({alias_define[1]}, {alias_define[2]})')
 
                 if len(matching) == 0:
-                    self.send_ok(channel, f'Nothing matches with "{which}"')
+                    suggestions = set([x for x in self.similar_to(which) if x != None])
+
+                    self.send_error(channel, f'Nothing matches with "{which}" (maybe {" or ".join(suggestions)}?)')
 
                 else:
                     self.send_ok(channel, f'Apro "{which}": ' + ', '.join(matching))
