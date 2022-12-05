@@ -2,11 +2,13 @@
 
 import configparser
 from dbi import dbi
+import difflib
 from enum import Enum
 from http_server import http_server
 from ircbot import ircbot, irc_keepalive
 import math
 from mqtt_handler import mqtt_handler
+import nltk
 from plugin_handler import plugins_class
 import random
 import select
@@ -621,9 +623,28 @@ class ghbot(ircbot):
                 return (False, f'irc::del_define: failed to delete alias {nr} ({e})')
 
     def similar_to(self, wrong):
-        results_parent = super().similar_to(wrong)
+        best_score        = 1000
+        best_alternative  = '(no suggestion)'
 
-        alias_best = None
+        best_score2       = -1000
+        best_alternative2 = '(no suggestion)'
+
+        for command in self.plugins:
+            current_score = nltk.edit_distance(command, wrong)
+
+            current_score2 = difflib.SequenceMatcher(None, command, wrong).ratio()
+
+            if current_score < best_score:
+                best_score = current_score
+
+                best_alternative = command
+
+            if current_score2 > best_score2:
+                best_score2 = current_score2
+
+                best_alternative2 = command
+
+        results = [best_alternative, best_alternative2]
 
         self.db.probe()
 
@@ -633,12 +654,12 @@ class ghbot(ircbot):
 
                 row = cursor.fetchone()
 
-                alias_best = row[0]
+                results.append(row[0])
 
             except Exception as e:
                 pass
 
-        return (results_parent[0], results_parent[1], alias_best)
+        return results
 
     def search_define(self, what):
         self.db.probe()

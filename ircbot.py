@@ -1,9 +1,7 @@
 #! /usr/bin/python3
 
-import difflib
 from enum import Enum
 import math
-import nltk
 import select
 import socket
 import sys
@@ -187,28 +185,7 @@ class ircbot(threading.Thread):
                 self.cond_352.wait(5.0 - t_diff)
 
     def similar_to(self, wrong):
-        best_score        = 1000
-        best_alternative  = '(no suggestion)'
-
-        best_score2       = -1000
-        best_alternative2 = '(no suggestion)'
-
-        for command in self.plugins:
-            current_score = nltk.edit_distance(command, wrong)
-
-            current_score2 = difflib.SequenceMatcher(None, command, wrong).ratio()
-
-            if current_score < best_score:
-                best_score = current_score
-
-                best_alternative = command
-
-            if current_score2 > best_score2:
-                best_score2 = current_score2
-
-                best_alternative2 = command
-
-        return (best_alternative, best_alternative2)
+        assert False
 
     def invoke_internal_commands(self, prefix, command, splitted_args, channel):
         return self.internal_command_rc.NOT_INTERNAL
@@ -345,13 +322,9 @@ class ircbot(threading.Thread):
                             method(channel, f'{nick}: command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
 
                         else:
-                            suggestion = self.similar_to(command)
+                            suggestions = set([x for x in self.similar_to(command) if x != None])
 
-                            if suggestion[0] != suggestion[1]:
-                                method(channel, f'{nick}: command "{command}" is not known (maybe {suggestion[0]} or {suggestion[1]}?)')
-
-                            else:
-                                method(channel, f'{nick}: command "{command}" is not known (maybe {suggestion[0]}?)')
+                            method(channel, f'{nick}: command "{command}" is not known (maybe {" or ".join(suggestions)}?)')
 
                     else:
                         access_granted, group_for_command = self.check_acls(prefix, command)
