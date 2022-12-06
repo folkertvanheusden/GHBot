@@ -69,7 +69,7 @@ class more():
                 if channel[0] == '\\':
                     channel = channel[1:]
 
-                self.channel.send(f'{self.command} {channel} :{current_more} ({n} more)')
+                self.channel.send(f'{self.command} {channel} :{current_more} \3{4}({n} more)')
 
         except Exception as e:
             print(f'more::send_more: exception "{e}" at {e.__traceback__.tb_lineno}')
@@ -160,13 +160,11 @@ class ircbot(threading.Thread):
         else:
             self.send_ok(channel, 'No more more')
 
-    # TODO: more
     def send_error(self, channel, text):
-        self.more_priv.send(channel, f'ERROR: {text}')
+        self.more_priv.send(channel, f'\3{4}ERROR: \2{text}')
 
-    # TODO: more
     def send_error_notice(self, channel, text):
-        self.more_noti.send(channel, f'ERROR: {text}')
+        self.more_noti.send(channel, f'\3{4}ERROR: \2{text}')
 
     def parse_irc_line(self, s):
         # from https://stackoverflow.com/questions/930700/python-parsing-irc-messages
