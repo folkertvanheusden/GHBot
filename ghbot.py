@@ -242,7 +242,7 @@ class ghbot(ircbot):
                 self.send_ok('#' + parts[2], self.escapes(msg))
 
             elif topic in self.topic_notice:
-                self.send(f'NOTICE #{parts[2]} :{msg}')
+                self.send_notice('#' + parts[2], msg)
 
             elif topic in self.topic_topic:
                 self.send(f'TOPIC #{parts[2]} :{msg}')
@@ -265,13 +265,12 @@ class ghbot(ircbot):
                     if nick[0] == '\\':
                         nick = nick[1:]
 
-                    self.send(f'PRIVMSG {nick} :{msg}')
+                    self.send_ok(nick, msg)
 
             elif self.pm_topic in topic:
                 nick = parts[2][1:]  # remove '\'
 
-                print(f'PRIVMSG {nick} :{msg}')
-                self.send(f'PRIVMSG {nick} :{msg}')
+                self.send_ok(nick, msg)
 
             else:
                 print(f'irc::_recv_msg_cb: invalid topic {topic}')

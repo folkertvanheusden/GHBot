@@ -9,6 +9,71 @@ import threading
 import time
 import traceback
 
+class more():
+    limit = 450
+
+    def __init__(self, channel, command, channels):
+        self.channel = channel
+        self.command = command
+
+        self.more    = dict()
+
+        for channel in channels:
+            self.more[channel] = ''
+
+    def has_more(self, channel):
+        return self.more[channel] != ''
+
+    def send(self, channel, text):
+        try:
+            if len(text) > more.limit:
+                self.more[channel] = text
+
+                self.send_more(channel)
+
+            else:
+                if channel[0] == '\\':
+                    channel = channel[1:]
+
+                self.channel.send(f'{self.command} {channel} :{text}')
+
+                self.more[channel] = ''
+
+        except Exception as e:
+            print(f'more::send: exception "{e}" at {e.__traceback__.tb_lineno}')
+
+    def send_more(self, channel):
+        try:
+            if not channel in self.more or self.more[channel] == '':
+                if channel[0] == '\\':
+                    channel = channel[1:]
+
+                self.channel.send(f'{self.command} {channel} :No more more')
+
+            else:
+                space = self.more[channel].find(' ', 450, more.limit - 25)
+
+                if space == -1:
+                    space = more.limit - 25
+
+                current_more = self.more[channel][0:space].strip()
+
+                if len(self.more[channel]) > space:
+                    self.more[channel] = self.more[channel][space:].strip()
+
+                else:
+                    self.more[channel] = ''
+
+                n = math.ceil(len(self.more[channel]) / more.limit)
+
+                if channel[0] == '\\':
+                    channel = channel[1:]
+
+                self.channel.send(f'{self.command} {channel} :{current_more} ({n} more)')
+
+        except Exception as e:
+            print(f'more::send_more: exception "{e}" at {e.__traceback__.tb_lineno}')
+
 class ircbot(threading.Thread):
     class session_state(Enum):
         DISCONNECTED   = 0x00  # setup socket, connect to host
@@ -45,13 +110,12 @@ class ircbot(threading.Thread):
 
         self.cond_352    = threading.Condition()
 
-        self.more        = dict()
-
         self.topics      = dict()
 
-        for channel in channels:
-            self.more[channel] = ''
+        self.more_priv   = more(self, 'PRIVMSG', channels)
+        self.more_noti   = more(self, 'NOTICE',  channels)
 
+        for channel in channels:
             self.joined_ch[channel] = False
 
     def _set_state(self, s):
@@ -66,6 +130,7 @@ class ircbot(threading.Thread):
 
     def send(self, s):
         try:
+            print(s)
             self.fd.send(f'{s}\r\n'.encode('utf-8'))
 
             return True
@@ -79,74 +144,29 @@ class ircbot(threading.Thread):
 
         return False
 
-    # TODO: more
     def send_notice(self, channel, text):
-        if channel[0] == '\\':
-            channel = channel[1:]
-
-        self.send(f'NOTICE {channel} :{text}')
+        self.more_noti.send(channel, text)
 
     def send_ok(self, channel, text):
-        print(f'OK: {channel}|{text}')
-
-        if len(text) > 350:
-            self.more[channel] = text
-
-            self.send_more(channel)
-
-        else:
-            if channel[0] == '\\':
-                channel = channel[1:]
-
-            self.send(f'PRIVMSG {channel} :{text}')
-
-            self.more[channel] = ''
+        self.more_priv.send(channel, text)
 
     def send_more(self, channel):
-        if not channel in self.more or self.more[channel] == '':
-            if channel[0] == '\\':
-                channel = channel[1:]
+        if self.more_noti.has_more(channel):
+            self.more_noti.send_more(channel)
 
-            self.send(f'PRIVMSG {channel} :No more ~more')
+        elif self.more_priv.has_more(channel):
+            self.more_priv.send_more(channel)
 
         else:
-            space = self.more[channel].find(' ', 300, 350)
-
-            if space == -1:
-                space = 325
-
-            current_more = self.more[channel][0:space].strip()
-
-            if len(self.more[channel]) > space:
-                self.more[channel] = self.more[channel][space:].strip()
-
-            else:
-                self.more[channel] = ''
-
-            n = math.ceil(len(self.more[channel]) / 350)
-
-            if channel[0] == '\\':
-                channel = channel[1:]
-
-            self.send(f'PRIVMSG {channel} :{current_more} ({n} ~more)')
+            self.send_ok(channel, 'No more more')
 
     # TODO: more
     def send_error(self, channel, text):
-        if channel[0] == '\\':
-            channel = channel[1:]
-
-        print(f'ERROR: {channel}|{text}')
-
-        self.send(f'PRIVMSG {channel} :ERROR: {text}')
+        self.more_priv.send(channel, f'ERROR: {text}')
 
     # TODO: more
     def send_error_notice(self, channel, text):
-        print(f'ERROR: {channel}|{text}')
-
-        if channel[0] == '\\':
-            channel = channel[1:]
-
-        self.send(f'NOTICE {channel} :ERROR: {text}')
+        self.more_noti.send(channel, f'ERROR: {text}')
 
     def parse_irc_line(self, s):
         # from https://stackoverflow.com/questions/930700/python-parsing-irc-messages
