@@ -1275,7 +1275,7 @@ class ghbot(ircbot):
 
             return self.internal_command_rc.HANDLED
 
-        elif self.local_plugins.process(identifier, (prefix, command, splitted_args, channel)):
+        elif self.local_plugins.process(prefix, (prefix, command, splitted_args, channel)):
             return self.internal_command_rc.HANDLED
 
         return self.internal_command_rc.NOT_INTERNAL
