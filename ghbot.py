@@ -1224,8 +1224,14 @@ class ghbot(ircbot):
                 self.send_error(channel, f'Apro: {err}')
 
             else:
-                for alias_define in rc:
-                    matching.add(f'{alias_define[0]} ({alias_define[1]}, {alias_define[2]})')
+                if len(matching) == 0:
+                    defines = set()
+
+                    for alias_define in rc:  # de-duplicate
+                        defines.add(alias_define[0])
+
+                    for define in defines:
+                        matching.add(f'{define}')  # maybe add some schmuck?
 
                 if len(matching) == 0:
                     suggestions = set([x for x in self.similar_to(which) if x != None])
