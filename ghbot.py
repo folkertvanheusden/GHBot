@@ -1208,6 +1208,8 @@ class ghbot(ircbot):
         elif command == 'apro':
             matching = set()
 
+            verbose = '-v' in splitted_args
+
             which = splitted_args[1].lower()
 
             for plugin in self.plugins:
@@ -1224,7 +1226,11 @@ class ghbot(ircbot):
                 self.send_error(channel, f'Apro: {err}')
 
             else:
-                if len(matching) == 0:
+                if verbose:
+                    for alias_define in rc:
+                        matching.add(f'{alias_define[0]} ({alias_define[1]}, {alias_define[2]})')
+
+                elif len(matching) == 0:
                     defines = set()
 
                     for alias_define in rc:  # de-duplicate
