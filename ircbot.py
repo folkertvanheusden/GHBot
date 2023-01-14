@@ -304,19 +304,20 @@ class ircbot(threading.Thread):
                 text    = args[1]
 
                 if text[0] == self.cmd_prefix:
-                    is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix)
+                    for i in range(0, 8):  # to prevent infinite alias-loops
+                        is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix)
 
-                    if new_text != None:
-                        if not is_command:
-                            if is_notice:
-                                self.send_notice(channel, new_text)
+                        if new_text != None:
+                            if not is_command:
+                                if is_notice:
+                                    self.send_notice(channel, new_text)
 
-                            else:
-                                self.send_ok(channel, new_text)
+                                else:
+                                    self.send_ok(channel, new_text)
 
-                            return
+                                return
 
-                        text = self.cmd_prefix + new_text
+                            text = self.cmd_prefix + new_text
 
                 if text[0] == self.cmd_prefix:
                     parts   = text[1:].split(' ')
