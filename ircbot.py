@@ -9,10 +9,75 @@ import threading
 import time
 import traceback
 
+class more():
+    limit = 450
+
+    def __init__(self, channel, command, channels):
+        self.channel = channel
+        self.command = command
+
+        self.more    = dict()
+
+        for channel in channels:
+            self.more[channel] = ''
+
+    def has_more(self, channel):
+        return self.more[channel] != ''
+
+    def send(self, channel, text):
+        try:
+            if len(text) > more.limit:
+                self.more[channel] = text
+
+                self.send_more(channel)
+
+            else:
+                if channel[0] == '\\':
+                    channel = channel[1:]
+
+                self.channel.send(f'{self.command} {channel} :{text}')
+
+                self.more[channel] = ''
+
+        except Exception as e:
+            print(f'more::send: exception "{e}" at {e.__traceback__.tb_lineno}')
+
+    def send_more(self, channel):
+        try:
+            if not channel in self.more or self.more[channel] == '':
+                if channel[0] == '\\':
+                    channel = channel[1:]
+
+                self.channel.send(f'{self.command} {channel} :No more more')
+
+            else:
+                space = self.more[channel].find(' ', 450, more.limit - 25)
+
+                if space == -1:
+                    space = more.limit - 25
+
+                current_more = self.more[channel][0:space].strip()
+
+                if len(self.more[channel]) > space:
+                    self.more[channel] = self.more[channel][space:].strip()
+
+                else:
+                    self.more[channel] = ''
+
+                n = math.ceil(len(self.more[channel]) / more.limit)
+
+                if channel[0] == '\\':
+                    channel = channel[1:]
+
+                self.channel.send(f'{self.command} {channel} :{current_more} \3{4}({n} more)')
+
+        except Exception as e:
+            print(f'more::send_more: exception "{e}" at {e.__traceback__.tb_lineno}')
 
 class ircbot(threading.Thread):
     class session_state(Enum):
         DISCONNECTED   = 0x00  # setup socket, connect to host
+        CONNECTED_PASS = 0x01  # send PASS
         CONNECTED_NICK = 0x02  # send NICK
         CONNECTED_USER = 0x03  # send USER
         USER_WAIT      = 0x08  # wait for USER ack
@@ -23,19 +88,20 @@ class ircbot(threading.Thread):
 
     state_timeout = 30         # state changes must not take longer than this
 
-    def __init__(self, host, port, nick, channels):
+    def __init__(self, host, port, nick, password, channels):
         super().__init__()
 
         self.host        = host
         self.port        = port
         self.nick        = nick
+        self.password    = password
         self.channels    = channels
-
-        self.error_ch    = self.channels[0]  # make configurable TODO
 
         self.joined_ch   = dict()
 
         self.fd          = None
+
+        self.owner       = 'flok'
 
         self.state       = self.session_state.DISCONNECTED
         self.state_since = time.time()
@@ -44,13 +110,12 @@ class ircbot(threading.Thread):
 
         self.cond_352    = threading.Condition()
 
-        self.more        = dict()
-
         self.topics      = dict()
 
-        for channel in channels:
-            self.more[channel] = ''
+        self.more_priv   = more(self, 'PRIVMSG', channels)
+        self.more_noti   = more(self, 'NOTICE',  channels)
 
+        for channel in channels:
             self.joined_ch[channel] = False
 
     def _set_state(self, s):
@@ -65,6 +130,7 @@ class ircbot(threading.Thread):
 
     def send(self, s):
         try:
+            print(s)
             self.fd.send(f'{s}\r\n'.encode('utf-8'))
 
             return True
@@ -78,74 +144,27 @@ class ircbot(threading.Thread):
 
         return False
 
-    # TODO: more
     def send_notice(self, channel, text):
-        if channel[0] == '\\':
-            channel = channel[1:]
-
-        self.send(f'NOTICE {channel} :{text}')
+        self.more_noti.send(channel, text)
 
     def send_ok(self, channel, text):
-        print(f'OK: {channel}|{text}')
-
-        if len(text) > 350:
-            self.more[channel] = text
-
-            self.send_more(channel)
-
-        else:
-            if channel[0] == '\\':
-                channel = channel[1:]
-
-            self.send(f'PRIVMSG {channel} :{text}')
-
-            self.more[channel] = ''
+        self.more_priv.send(channel, text)
 
     def send_more(self, channel):
-        if not channel in self.more or self.more[channel] == '':
-            if channel[0] == '\\':
-                channel = channel[1:]
+        if self.more_noti.has_more(channel):
+            self.more_noti.send_more(channel)
 
-            self.send(f'PRIVMSG {channel} :No more ~more')
+        elif self.more_priv.has_more(channel):
+            self.more_priv.send_more(channel)
 
         else:
-            space = self.more[channel].find(' ', 300, 350)
+            self.send_ok(channel, 'No more more')
 
-            if space == -1:
-                space = 325
-
-            current_more = self.more[channel][0:space].strip()
-
-            if len(self.more[channel]) > space:
-                self.more[channel] = self.more[channel][space:].strip()
-
-            else:
-                self.more[channel] = ''
-
-            n = math.ceil(len(self.more[channel]) / 350)
-
-            if channel[0] == '\\':
-                channel = channel[1:]
-
-            self.send(f'PRIVMSG {channel} :{current_more} ({n} ~more)')
-
-    # TODO: more
     def send_error(self, channel, text):
-        if channel[0] == '\\':
-            channel = channel[1:]
+        self.more_priv.send(channel, f'\3{4}ERROR: \2{text}')
 
-        print(f'ERROR: {channel}|{text}')
-
-        self.send(f'PRIVMSG {channel} :ERROR: {text}')
-
-    # TODO: more
     def send_error_notice(self, channel, text):
-        print(f'ERROR: {channel}|{text}')
-
-        if channel[0] == '\\':
-            channel = channel[1:]
-
-        self.send(f'NOTICE {channel} :ERROR: {text}')
+        self.more_noti.send(channel, f'\3{4}ERROR: \2{text}')
 
     def parse_irc_line(self, s):
         # from https://stackoverflow.com/questions/930700/python-parsing-irc-messages
@@ -182,6 +201,9 @@ class ircbot(threading.Thread):
 
             with self.cond_352:
                 self.cond_352.wait(5.0 - t_diff)
+
+    def similar_to(self, wrong):
+        assert False
 
     def invoke_internal_commands(self, prefix, command, splitted_args, channel):
         return self.internal_command_rc.NOT_INTERNAL
@@ -265,7 +287,7 @@ class ircbot(threading.Thread):
                 #print(f'{old_lower_prefix} => {new_prefix}')
 
             except Exception as e:
-                self.send_error(self.error_ch, f'irc::handle_irc_command: exception "{e}" during execution of IRC command NICK at line number: {e.__traceback__.tb_lineno}')
+                send_notice(self.owner, f'irc::handle_irc_command: exception "{e}" during execution of IRC command NICK at line number: {e.__traceback__.tb_lineno}')
 
         elif command == 'PING':
             if len(args) >= 1:
@@ -282,19 +304,20 @@ class ircbot(threading.Thread):
                 text    = args[1]
 
                 if text[0] == self.cmd_prefix:
-                    is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix)
+                    for i in range(0, 8):  # to prevent infinite alias-loops
+                        is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix)
 
-                    if new_text != None:
-                        if not is_command:
-                            if is_notice:
-                                self.send_notice(channel, new_text)
+                        if new_text != None:
+                            if not is_command:
+                                if is_notice:
+                                    self.send_notice(channel, new_text)
 
-                            else:
-                                self.send_ok(channel, new_text)
+                                else:
+                                    self.send_ok(channel, new_text)
 
-                            return
+                                return
 
-                        text = self.cmd_prefix + new_text
+                            text = self.cmd_prefix + new_text
 
                 if text[0] == self.cmd_prefix:
                     parts   = text[1:].split(' ')
@@ -318,7 +341,9 @@ class ircbot(threading.Thread):
                             method(channel, f'{nick}: command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
 
                         else:
-                            method(channel, f'{nick}: command "{command}" is not known')
+                            suggestions = set([x for x in self.similar_to(command) if x != None])
+
+                            method(channel, f'{nick}: command "{command}" is not known (maybe {" or ".join(suggestions)}?)')
 
                     else:
                         access_granted, group_for_command = self.check_acls(prefix, command)
@@ -385,7 +410,7 @@ class ircbot(threading.Thread):
                 self.handle_irc_commands(prefix, command, arguments)
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}" at line number: {e.__traceback__.tb_lineno}')
+            print(f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}" at line number: {e.__traceback__.tb_lineno}')
 
             traceback.print_exc(file=sys.stdout)
 
@@ -412,12 +437,16 @@ class ircbot(threading.Thread):
 
                     self.poller.register(self.fd, select.POLLIN)
 
-                    self._set_state(self.session_state.CONNECTED_NICK)
+                    self._set_state(self.session_state.CONNECTED_PASS)
 
                 except Exception as e:
                     print(f'irc::run: failed to connect: {e}')
                     
                     self.fd.close()
+
+            elif self.state == self.session_state.CONNECTED_PASS:
+                if self.send(f'PASS {self.password}'):
+                    self._set_state(self.session_state.CONNECTED_NICK)
 
             elif self.state == self.session_state.CONNECTED_NICK:
                 # apparently only error responses are returned, no acks

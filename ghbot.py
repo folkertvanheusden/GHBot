@@ -2,11 +2,13 @@
 
 import configparser
 from dbi import dbi
+import difflib
 from enum import Enum
 from http_server import http_server
 from ircbot import ircbot, irc_keepalive
 import math
 from mqtt_handler import mqtt_handler
+import nltk
 from plugin_handler import plugins_class
 import random
 import select
@@ -23,8 +25,8 @@ class ghbot(ircbot):
         ERROR        = 0x10
         NOT_INTERNAL = 0xff
 
-    def __init__(self, host, port, nick, channels, m, db, cmd_prefix, local_plugin_subdir):
-        super().__init__(host, port, nick, channels)
+    def __init__(self, host, port, nick, password, channels, m, db, cmd_prefix, local_plugin_subdir):
+        super().__init__(host, port, nick, password, channels)
 
         self.cmd_prefix    = cmd_prefix
 
@@ -47,14 +49,16 @@ class ghbot(ircbot):
         self.plugins['deluser']  = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['meet']     = ['Use this when a user (nick) has a new hostname: meet <nick>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['merge']    = ['Use this to add a host-alias for an existing user (nick): merge <new-nick> <old-nick>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['commands'] = ['Show list of known commands', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['define']   = ['Define a command that will be replied to with a definable text, format: !define <command> <text... with %m (/me), %q (parameters) and %u (nick of invoker) escapes>', None, now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['define']   = ['Define a command that will be replied to with a definable text, format: !define <command> <text... with %m (/me), %q (parameters) and %u (nick of invoker) escapes, %n for notice>', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['deldefine']= ['Delete a define (by number)', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['alias']    = ['Add a different name for a command, format: !alias <newname> <oldname>', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['searchdefine'] = ['Search for defines that match a partial text', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['searchalias'] = ['Search for aliases that match a partial text', None, now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['viewalias'] = ['Show what an alias is doing', None, now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
         self.plugins['apro']     = ['Show commands that match a partial text', None, now, 'Flok', 'harkbot.vm.nurd.space']
@@ -217,7 +221,7 @@ class ghbot(ircbot):
 
         self.plugins_lock.release()
 
-    def _send_topics_to_plugins():
+    def _send_topics_to_plugins(self):
         for channel in self.topics:
             self.mqtt.publish(f'from/irc/{channel}/topic', self.topics[channel])
 
@@ -229,8 +233,6 @@ class ghbot(ircbot):
 
             parts = topic.split('/')
 
-            # print(self.pm_topic, topic, '|', parts)
-
             if msg.find('\n') != -1 or msg.find('\r') != -1:
                 print(f'irc::_recv_msg_cb: invalid content to send for {topic}')
 
@@ -240,12 +242,13 @@ class ghbot(ircbot):
                 self.send_ok('#' + parts[2], self.escapes(msg))
 
             elif topic in self.topic_notice:
-                self.send(f'NOTICE #{parts[2]} :{msg}')
+                self.send_notice('#' + parts[2], msg)
 
             elif topic in self.topic_topic:
                 self.send(f'TOPIC #{parts[2]} :{msg}')
 
-            elif toic in self.topic_request:
+            elif topic in self.topic_request:
+                print(f'plugin requested {msg}')
                 if msg == 'topics':
                     self._send_topics_to_plugins()
 
@@ -253,17 +256,21 @@ class ghbot(ircbot):
                 self._register_plugin(msg)
 
             elif parts[0] + '/' + parts[1] in self.topic_to_nick:
-                nick = parts[2]
+                if parts[-1].lower() == 'mode':
+                    self.send(f'MODE #{parts[2]} {msg}')
 
-                if nick[0] == '\\':
-                    nick = nick[1:]
+                else:
+                    nick = parts[2]
 
-                self.send(f'PRIVMSG {nick} :{msg}')
+                    if nick[0] == '\\':
+                        nick = nick[1:]
+
+                    self.send_ok(nick, msg)
 
             elif self.pm_topic in topic:
                 nick = parts[2][1:]  # remove '\'
 
-                self.send(f'PRIVMSG {nick} :{msg}')
+                self.send_ok(nick, msg)
 
             else:
                 print(f'irc::_recv_msg_cb: invalid topic {topic}')
@@ -272,6 +279,20 @@ class ghbot(ircbot):
 
         except Exception as e:
             print(f'irc::_recv_msg_cb: exception {e} while processing {topic}|{msg} (at line number: {e.__traceback__.tb_lineno})')
+
+    def check_acl_alias(self, who):
+        with self.db.db.cursor() as cursor:
+            # see if this is an alias, then if so: pick main address
+            cursor.execute('SELECT main_account FROM account_aliasses WHERE account=%s', (who.lower(),))
+
+            row = cursor.fetchone()
+
+            if row != None:
+                who = row[0].lower()
+
+                print(f'Using ACL {who}')
+
+            return who
 
     def check_acls(self, who, command):
         self.plugins_lock.acquire()
@@ -288,118 +309,155 @@ class ghbot(ircbot):
 
         self.db.probe()  # to prevent those pesky "sever has gone away" problems
 
-        cursor = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            who = self.check_acl_alias(who)
 
-        # check per user ACLs (can override group as defined in plugin)
-        cursor.execute('SELECT COUNT(*) FROM acls WHERE command=%s AND who=%s', (command.lower(), who.lower()))
+            # check per user ACLs (can override group as defined in plugin)
+            cursor.execute('SELECT COUNT(*) FROM acls WHERE command=%s AND who=%s', (command.lower(), who.lower()))
 
-        row = cursor.fetchone()
+            row = cursor.fetchone()
 
-        if row[0] >= 1:
-            return (True, plugin_group)
+            if row[0] >= 1:
+                return (True, plugin_group)
 
-        # check per group ACLs (can override group as defined in plugin)
-        cursor.execute('SELECT COUNT(*) FROM acls, acl_groups WHERE acl_groups.who=%s AND acl_groups.group_name=acls.who AND command=%s', (who.lower(), command.lower()))
+            # check per group ACLs (can override group as defined in plugin)
+            cursor.execute('SELECT COUNT(*) FROM acls, acl_groups WHERE acl_groups.who=%s AND acl_groups.group_name=acls.who AND command=%s', (who.lower(), command.lower()))
 
-        row = cursor.fetchone()
+            row = cursor.fetchone()
 
-        if row[0] >= 1:
-            return (True, plugin_group)
+            if row[0] >= 1:
+                return (True, plugin_group)
 
-        # check if user is in group as specified by plugin
-        cursor.execute('SELECT COUNT(*) FROM acl_groups WHERE group_name=%s AND who=%s', (plugin_group, who))
+            # check if user is in group as specified by plugin
+            cursor.execute('SELECT COUNT(*) FROM acl_groups WHERE group_name=%s AND who=%s', (plugin_group, who.lower()))
 
-        row = cursor.fetchone()
+            row = cursor.fetchone()
 
-        if row[0] >= 1:
-            return (True, plugin_group)
+            if row[0] >= 1:
+                return (True, plugin_group)
 
-        return (False, plugin_group)
+            return (False, plugin_group)
 
     def list_acls(self, who):
         self.db.probe()
 
-        cursor = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            who = self.check_acl_alias(who)
 
-        cursor.execute('SELECT DISTINCT item FROM (SELECT command AS item FROM acls WHERE who=%s UNION SELECT group_name AS item FROM acl_groups WHERE who=%s) AS in_ ORDER BY item', (who.lower(), who.lower()))
+            cursor.execute('SELECT DISTINCT item FROM (SELECT command AS item FROM acls WHERE who=%s UNION SELECT group_name AS item FROM acl_groups WHERE who=%s) AS in_ ORDER BY item', (who.lower(), who.lower()))
 
-        out = []
+            out = []
 
-        for row in cursor:
-            out.append(row[0])
+            for row in cursor:
+                out.append(row[0])
 
-        return out
+            return out
 
     def add_acl(self, who, command):
         self.db.probe()
 
-        cursor = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            who = self.check_acl_alias(who)
 
-        try:
-            cursor.execute('INSERT INTO acls(command, who) VALUES(%s, %s)', (command.lower(), who.lower()))
+            try:
+                cursor.execute('INSERT INTO acls(command, who) VALUES(%s, %s)', (command.lower(), who.lower()))
 
-            self.db.db.commit()
+                self.db.db.commit()
 
-            return True
+                return (True, 'Ok')
 
-        except Exception as e:
-            self.send_error(self.error_ch, f'irc::add_acl: failed to insert acl ({e})')
-
-        return False
+            except Exception as e:
+                return (False, f'irc::add_acl: failed to insert acl ({e})')
 
     def del_acl(self, who, command):
         self.db.probe()
 
-        cursor = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            who = self.check_acl_alias(who)
 
-        try:
-            cursor.execute('DELETE FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
+            try:
+                cursor.execute('DELETE FROM acls WHERE command=%s AND who=%s LIMIT 1', (command.lower(), who.lower()))
 
-            self.db.db.commit()
+                self.db.db.commit()
 
-            return True
+                if cursor.rowcount == 1:
+                    return (True, 'Ok')
 
-        except Exception as e:
-            self.send_error(self.error_ch, f'irc::del_acl: failed to delete acl ({e})')
-        
-        return False
+                return (False, 'That command/nick combination was not known')
+
+            except Exception as e:
+                return (False, f'irc::del_acl: failed to delete acl ({e})')
 
     def forget_acls(self, who):
         match_ = who + '!%'
 
-        cursor = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            who = self.check_acl_alias(who)
 
-        try:
-            cursor.execute('DELETE FROM acls WHERE who LIKE %s', (match_,))
+            try:
+                cursor.execute('DELETE FROM acls WHERE who LIKE %s', (match_,))
+                any_del = cursor.rowcount == 1
 
-            cursor.execute('DELETE FROM acl_groups WHERE who LIKE %s', (match_,))
+                cursor.execute('DELETE FROM acl_groups WHERE who LIKE %s', (match_,))
+                any_del |= cursor.rowcount == 1
 
-            self.db.db.commit()
+                self.db.db.commit()
 
-            return True
+                if any_del:
+                    return (True, 'Ok')
 
-        except Exception as e:
-            self.send_error(self.error_ch, f'irc::forget_acls: failed to forget acls for {match_}: {e}')
-        
-        return False
+                return (False, 'No acls found for that nick')
+
+            except Exception as e:
+                return (False, f'irc::forget_acls: failed to forget acls for {match_}: {e}')
 
     def clone_acls(self, from_, to_):
-        cursor = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            who = self.check_acl_alias(who)
 
-        try:
-            cursor.execute('SELECT group_name FROM acl_groups WHERE who=%s', (from_,))
+            try:
+                cursor.execute('SELECT group_name FROM acl_groups WHERE who=%s', (from_,))
 
-            for row in cursor.fetchall():
-                cursor.execute('INSERT INTO acl_groups(group_name, who) VALUES(%s, %s)', (row, to_))
+                for row in cursor.fetchall():
+                    cursor.execute('INSERT INTO acl_groups(group_name, who) VALUES(%s, %s)', (row, to_))
 
-            self.db.db.commit()
+                self.db.db.commit()
 
-            return None
+                return (True, 'Ok')
 
-        except Exception as e:
-            return f'failed to clone acls: {e}'
-        
-        return 'Unexpected situation'
+            except Exception as e:
+                return (False, f'failed to clone acls: {e}')
+
+    def merge_nick(self, new_nick, old_nick):
+        with self.db.db.cursor() as cursor:
+            if '%' in old_nick or '%' in new_nick:
+                return (False, 'haxxxor')
+
+            match_ = old_nick if '!' in old_nick else (old_nick + '!%')
+
+            try:
+                cursor.execute('SELECT who FROM acl_groups WHERE who LIKE %s GROUP BY who', (match_,))
+
+                rows = cursor.fetchall()
+
+                if len(rows) == 0:
+                    return (False, f'Old user ({old_nick}) is not known')
+
+                if len(rows) > 1:
+                    full_names = [row[0] for row in rows]
+
+                    return (False, f'Old user ({old_nick}) is ambiguous: {", ".join(full_names)}')
+
+                print(rows, new_nick)
+
+                cursor.execute('INSERT INTO account_aliasses(main_account, account) VALUES(%s, %s)', (rows[0][0], new_nick.lower()))
+
+                self.db.db.commit()
+
+                return (True, 'Ok')
+
+            except Exception as e:
+                return (False, f'failed to add alias: {e}, {e.__traceback__.tb_lineno}')
 
     # new_fullname is the new 'nick!user@host'
     def update_acls(self, who, new_fullname):
@@ -407,53 +465,60 @@ class ghbot(ircbot):
 
         match_ = who + '!%'
 
-        cursor = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            try:
+                cursor.execute('UPDATE acls SET who=%s WHERE who LIKE %s', (new_fullname, match_))
 
-        try:
-            cursor.execute('UPDATE acls SET who=%s WHERE who LIKE %s', (new_fullname, match_))
+                any_upd = cursor.rowcount == 1
 
-            cursor.execute('UPDATE acl_groups SET who=%s WHERE who LIKE %s', (new_fullname, match_))
+                cursor.execute('UPDATE acl_groups SET who=%s WHERE who LIKE %s', (new_fullname, match_))
 
-            self.db.db.commit()
+                any_upd |= cursor.rowcount == 1
 
-            return (True, 'Ok')
+                self.db.db.commit()
 
-        except Exception as e:
-            return (False, f'irc::update_acls: failed to update acls ({e})')
+                if any_upd:
+                    return (True, 'Ok')
+
+                return (False, 'No such user')
+
+            except Exception as e:
+                return (False, f'irc::update_acls: failed to update acls ({e})')
 
     def group_add(self, who, group):
         self.db.probe()
 
-        cursor = self.db.db.cursor()
+        who = self.check_acl_alias(who)
 
-        try:
-            cursor.execute('INSERT INTO acl_groups(who, group_name) VALUES(%s, %s)', (who.lower(), group.lower()))
+        with self.db.db.cursor() as cursor:
+            try:
+                cursor.execute('INSERT INTO acl_groups(who, group_name) VALUES(%s, %s)', (who.lower(), group.lower()))
 
-            self.db.db.commit()
+                self.db.db.commit()
 
-            return True
+                return (True, 'Ok')
 
-        except Exception as e:
-            self.send_error(self.error_ch, f'irc::group_add: failed to insert group-member ({e})')
-
-        return False
+            except Exception as e:
+                return (False, f'irc::group_add: failed to insert group-member ({e})')
 
     def group_del(self, who, group):
         self.db.probe()
 
-        cursor = self.db.db.cursor()
+        who = self.check_acl_alias(who)
 
-        try:
-            cursor.execute('DELETE FROM acl_groups WHERE who=%s AND group_name=%s LIMIT 1', (who.lower(), group.lower()))
+        with self.db.db.cursor() as cursor:
+            try:
+                cursor.execute('DELETE FROM acl_groups WHERE who=%s AND group_name=%s LIMIT 1', (who.lower(), group.lower()))
 
-            self.db.db.commit()
+                self.db.db.commit()
 
-            return True
+                if cursor.rowcount == 1:
+                    return (True, 'Ok')
 
-        except Exception as e:
-            self.send_error(self.error_ch, f'irc::group-del: failed to delete group-member ({e})')
+                return (False, 'That user/group combination was not known')
 
-        return False
+            except Exception as e:
+                return (False, f'irc::group-del: failed to delete group-member ({e}, {e.__traceback__.tb_lineno})')
 
     def check_user_known(self, user):
         if '!' in user:
@@ -474,20 +539,19 @@ class ghbot(ircbot):
     def is_group(self, group):
         self.db.probe()
 
-        cursor = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            try:
+                cursor.execute('SELECT COUNT(*) FROM acl_groups WHERE group_name=%s LIMIT 1', (group.lower(), ))
 
-        try:
-            cursor.execute('SELECT COUNT(*) FROM acl_groups WHERE group_name=%s LIMIT 1', (group.lower(), ))
+                row = cursor.fetchone()
 
-            row = cursor.fetchone()
+                if row[0] >= 1:
+                    return True
 
-            if row[0] >= 1:
-                return True
+            except Exception as e:
+                send_notice(self.owner, f'irc::is_group: failed to query database for group {group} ({e})')
 
-        except Exception as e:
-            self.send_error(self.error_ch, f'irc::is_group: failed to query database for group {group} ({e})')
-
-        return False
+            return False
 
     # e.g. 'group', 'bla' where 'group' is the key and 'bla' the value
     def find_key_in_list(self, list_, item, search_start):
@@ -529,62 +593,92 @@ class ghbot(ircbot):
     def add_define(self, command, is_alias, arguments):
         self.db.probe()
 
-        cursor = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            try:
+                cursor.execute('INSERT INTO aliasses(command, is_command, replacement_text) VALUES(%s, %s, %s)', (command.lower(), 1 if is_alias else 0, arguments))
 
-        try:
-            cursor.execute('INSERT INTO aliasses(command, is_command, replacement_text) VALUES(%s, %s, %s)', (command.lower(), 1 if is_alias else 0, arguments))
+                self.db.db.commit()
 
-            self.db.db.commit()
+                return (True, cursor.lastrowid, 'Ok')
 
-            return (True, cursor.lastrowid)
-
-        except Exception as e:
-            self.send_error(self.error_ch, f'irc::add_define: failed to insert alias ({e})')
-
-        return (False, -1)
+            except Exception as e:
+                return (False, -1, f'irc::add_define: failed to insert alias ({e})')
 
     def del_define(self, nr):
         self.db.probe()
 
-        cursor = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            try:
+                cursor.execute('DELETE FROM aliasses WHERE nr=%s', (nr,))
 
-        try:
-            cursor.execute('DELETE FROM aliasses WHERE nr=%s', (nr,))
+                self.db.db.commit()
 
-            self.db.db.commit()
+                if cursor.rowcount == 1:
+                    return (True, 'Ok')
 
-            if cursor.rowcount == 1:
-                return True
+                return (False, f'irc::del_define: unexpected affected rows count {cursor.rowcount}')
 
-            self.send_error(self.error_ch, f'irc::del_define: unexpected affected rows count {cursor.rowcount}')
+            except Exception as e:
+                return (False, f'irc::del_define: failed to delete alias {nr} ({e})')
 
-        except Exception as e:
-            self.send_error(self.error_ch, f'irc::del_define: failed to delete alias {nr} ({e})')
+    def similar_to(self, wrong):
+        best_score        = 1000
+        best_alternative  = '(no suggestion)'
 
-        return False
+        best_score2       = -1000
+        best_alternative2 = '(no suggestion)'
+
+        for command in self.plugins:
+            current_score = nltk.edit_distance(command, wrong)
+
+            current_score2 = difflib.SequenceMatcher(None, command, wrong).ratio()
+
+            if current_score < best_score:
+                best_score = current_score
+
+                best_alternative = command
+
+            if current_score2 > best_score2:
+                best_score2 = current_score2
+
+                best_alternative2 = command
+
+        results = [best_alternative, best_alternative2]
+
+        self.db.probe()
+
+        with self.db.db.cursor() as cursor:
+            try:
+                cursor.execute('select command from aliasses where command sounds like %s', (wrong,))
+
+                row = cursor.fetchone()
+
+                results.append(row[0])
+
+            except Exception as e:
+                pass
+
+        return results
 
     def search_define(self, what):
         self.db.probe()
 
-        cursor = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            try:
+                cursor.execute('SELECT command, nr, replacement_text FROM aliasses WHERE nr=%s OR command like %s ORDER BY nr DESC', (what, f'%%{what.lower()}%%',))
 
-        try:
-            cursor.execute('SELECT command, nr FROM aliasses WHERE command like %s ORDER BY nr DESC', (f'%%{what.lower()}%%', ))
+                results = []
 
-            results = []
+                for row in cursor:
+                    results.append(row)
 
-            for row in cursor:
-                results.append(row)
+                if len(results) > 0:
+                    return (results, True, 'Ok')
 
-            cursor.close()
+            except Exception as e:
+                return (None, False, f'irc::del_define: failed to delete alias {nr} ({e})')
 
-            if len(results) > 0:
-                return results
-
-        except Exception as e:
-            self.send_error(self.error_ch, f'irc::del_define: failed to delete alias {nr} ({e})')
-
-        return None
+            return (None, True, 'None')
 
     def escapes(self, text):
         if '%R' in text:
@@ -601,55 +695,54 @@ class ghbot(ircbot):
         parts   = text.split(' ')
         command = parts[0]
 
-        cursor  = self.db.db.cursor()
+        with self.db.db.cursor() as cursor:
+            cursor.execute('SELECT is_command, replacement_text FROM aliasses WHERE command=%s ORDER BY RAND() LIMIT 1', (command.lower(), ))
 
-        cursor.execute('SELECT is_command, replacement_text FROM aliasses WHERE command=%s ORDER BY RAND() LIMIT 1', (command.lower(), ))
+            row = cursor.fetchone()
 
-        row = cursor.fetchone()
+            if row == None:
+                return (False, None, False)
 
-        if row == None:
-            return (False, None, False)
+            is_command = row[0]
+            repl_text  = row[1]
 
-        is_command = row[0]
-        repl_text  = row[1]
+            space      = text.find(' ')
 
-        space      = text.find(' ')
+            if space == -1:
+                query_text = username
 
-        if space == -1:
-            query_text = username
+                if '!' in query_text:
+                    query_text = query_text[0:query_text.find('!')]
 
-            if '!' in query_text:
-                query_text = query_text[0:query_text.find('!')]
+            else:
+                query_text = text[space + 1:]
 
-        else:
-            query_text = text[space + 1:]
+            if is_command:  # initially only replaces command
+                text = repl_text + ' ' + query_text
 
-        if is_command:  # initially only replaces command
-            text = repl_text + ' ' + query_text
+            else:
+                text = repl_text
 
-        else:
-            text = repl_text
+            text = self.escapes(text)
 
-        text = self.escapes(text)
+            if username != None:
+                exclamation_mark = username.find('!')
 
-        if username != None:
-            exclamation_mark = username.find('!')
+                if exclamation_mark != -1:
+                    username = username[0:exclamation_mark]
 
-            if exclamation_mark != -1:
-                username = username[0:exclamation_mark]
+                text = text.replace('%u', username)
 
-            text = text.replace('%u', username)
+            text = text.replace('%q', query_text)
 
-        text = text.replace('%q', query_text)
+            notice = False
 
-        notice = False
+            if '%n' in text:
+                text = text.replace('%n', '')
 
-        if '%n' in text:
-            text = text.replace('%n', '')
+                notice = True
 
-            notice = True
-
-        return (is_command, text, notice)
+            return (is_command, text, notice)
 
     def invoke_internal_commands(self, prefix, command, splitted_args, channel):
         identifier  = None
@@ -704,12 +797,15 @@ class ghbot(ircbot):
             if group_idx != None:
                 group_name = splitted_args[group_idx + 1]
 
-                if self.group_add(identifier, group_name):  # who, group
+                rc = self.group_add(identifier, group_name)  # who, group
+                if rc[0]:
                     self.send_ok(channel, f'User {identifier} added to group {group_name}')
 
                     return self.internal_command_rc.HANDLED
 
                 else:
+                    self.send_error(channel, rc[1])
+
                     return self.internal_command_rc.ERROR
 
             elif cmd_idx != None:
@@ -722,13 +818,14 @@ class ghbot(ircbot):
                 self.plugins_lock.release()
 
                 if plugin_known:
-                    if self.add_acl(identifier, cmd_name):  # who, command
+                    rc = self.add_acl(identifier, cmd_name)  # who, command
+                    if rc[0]:  # who, command
                         self.send_ok(channel, f'ACL added for user or group {identifier} for command {cmd_name}')
 
                         return self.internal_command_rc.HANDLED
 
                     else:
-                        self.send_error(channel, 'Failed to add ACL - did it exist already?')
+                        self.send_error(channel, f'Failed to add ACL - did it exist already? ({rc[1]})')
 
                         return self.internal_command_rc.ERROR
 
@@ -756,27 +853,33 @@ class ghbot(ircbot):
             if group_idx != None:
                 group_name = splitted_args[group_idx + 1]
 
-                if self.group_del(identifier, group_name):  # who, group
+                rc = self.group_del(identifier, group_name)  # who, group
+                if rc[0]:  # who, group
                     self.send_ok(channel, f'User {identifier} removed from group {group_name}')
 
                     return self.internal_command_rc.HANDLED
 
                 else:
+                    self.send_error(channel, rc[1])
+
                     return self.internal_command_rc.ERROR
 
             elif cmd_idx != None:
                 cmd_name = splitted_args[cmd_idx + 1]
 
-                if self.del_acl(identifier, cmd_name):  # who, command
+                rc = self.del_acl(identifier, cmd_name)  # who, command
+                if rc[0]:  # who, command
                     self.send_ok(channel, f'ACL removed for user {identifier} for command {cmd_name}')
 
                     return self.internal_command_rc.HANDLED
 
                 else:
+                    self.send_error(channel, f'Failed to delete ACL ({rc[1]})')
+
                     return self.internal_command_rc.ERROR
 
             else:
-                self.send_error(channel, f'Usage: delacl <user> group|cmd <group-name|cmd-name>')
+                self.send_error(channel, f'Usage: delacl user <user> group|cmd <group-name|cmd-name>')
 
                 return self.internal_command_rc.ERROR
 
@@ -820,6 +923,28 @@ class ghbot(ircbot):
             else:
                 self.send_error(channel, f'Meet parameter missing ({splitted_args} given)')
 
+        elif command == 'merge':
+            if splitted_args != None and len(splitted_args) == 3:
+                new_nick = splitted_args[1].lower()
+                old_nick = splitted_args[2].lower()
+
+                self.invoke_who_and_wait(new_nick)
+
+                if new_nick in self.users:
+                    ok, error_text = self.merge_nick(self.users[new_nick], old_nick)
+
+                    if ok:
+                        self.send_ok(channel, f'Added alias for {old_nick}: {self.users[new_nick]}')
+
+                    else:
+                        self.send_error(channel, error_text)
+
+                else:
+                    self.send_error(channel, f'Merge: user {new_nick} is not known (to be merged with {old_nick})')
+
+            else:
+                self.send_error(channel, f'Meet parameter(s) missing ({splitted_args} given)')
+
         elif command == 'commands':
             plugins = self.list_plugins()
 
@@ -845,20 +970,20 @@ class ghbot(ircbot):
                     if is_alias and also_known_as[0] == '!':
                         also_known_as = also_known_as[1:]
 
-                    rc, nr = self.add_define(splitted_args[1], is_alias, also_known_as)
+                    rc, nr, err = self.add_define(splitted_args[1], is_alias, also_known_as)
 
                     if rc == True:
                         self.send_ok(channel, f'{command} added (number: {nr})')
 
                     else:
-                        self.send_error(channel, f'Failed to add {command}')
+                        self.send_error(channel, f'Failed to add {command}: {err}')
 
             else:
                 self.send_error(channel, f'{command} missing arguments')
 
         elif command == 'searchdefine' or command == 'searchalias':
             if len(splitted_args) >= 2:
-                found = self.search_define(splitted_args[1])
+                found, ok, err = self.search_define(splitted_args[1])
 
                 if found != None:
                     defines = None
@@ -874,8 +999,29 @@ class ghbot(ircbot):
 
                     self.send_ok(channel, defines)
 
-                else:
+                elif ok:
                     self.send_error(channel, 'None found')
+
+                else:
+                    self.send_error(channel, '{err}')
+
+            else:
+                self.send_error(channel, f'{command} missing arguments')
+
+        elif command == 'viewalias':
+            if len(splitted_args) >= 2:
+                found, ok, err = self.search_define(splitted_args[1])
+
+                if found != None:
+                    rc = f'{splitted_args[1]}: {found[0][2]}'
+
+                    self.send_ok(channel, rc)
+
+                elif ok:
+                    self.send_error(channel, 'None found')
+
+                else:
+                    self.send_error(channel, '{err}')
 
             else:
                 self.send_error(channel, f'{command} missing arguments')
@@ -885,13 +1031,13 @@ class ghbot(ircbot):
                 try:
                     nr = int(splitted_args[1])
 
-                    rc = self.del_define(nr)
+                    rc, err = self.del_define(nr)
 
                     if rc == True:
                         self.send_ok(channel, f'Define {nr} deleted')
 
                     else:
-                        self.send_error(channel, f'Failed to delete {nr}')
+                        self.send_error(channel, f'Failed to delete {nr}: {err}')
 
                 except ValueError as ve:
                     self.send_error(channel, f'Parameter {splitted_args[1]} is not a number')
@@ -909,7 +1055,9 @@ class ghbot(ircbot):
                     self.send_ok(channel, f'Command {cmd}: {self.plugins[cmd][0]} (group: {self.plugins[cmd][1]})')
 
                 else:
-                    self.send_error(channel, f'Command/plugin not known')
+                    suggestions = set([x for x in self.similar_to(cmd) if x != None])
+
+                    self.send_error(channel, f'Command/plugin not known (maybe {" or ".join(suggestions)}?)')
 
                 self.plugins_lock.release()
 
@@ -929,11 +1077,16 @@ class ghbot(ircbot):
             if len(splitted_args) == 2:
                 user = splitted_args[1]
 
-                if not '%' in user and self.forget_acls(user):
+                if '%' in user:
+                    self.send_error(channel, f'User {user} not known or some other error')
+                    return self.internal_command_rc.ERROR
+
+                rc = self.forget_acls(user)
+                if rc[0]:
                     self.send_ok(channel, f'User {user} forgotten')
 
                 else:
-                    self.send_error(channel, f'User {user} not known or some other error')
+                    self.send_error(channel, f'User {user} not known or some other error ({rc[1]})')
 
             else:
                 self.send_error(channel, f'User not specified')
@@ -973,32 +1126,29 @@ class ghbot(ircbot):
 
         elif command == 'listgroups':
             try:
-                cursor = self.db.db.cursor()
+                with self.db.db.cursor() as cursor:
+                    cursor.execute('SELECT DISTINCT who FROM acls')
 
-                cursor.execute('SELECT DISTINCT who FROM acls')
+                    groups = set()
 
-                groups = set()
+                    # defined by sysop(s)
+                    for row in cursor.fetchall():
+                        groups.add(row[0])
 
-                # defined by sysop(s)
-                for row in cursor.fetchall():
-                    groups.add(row[0])
+                    # defined by plugins
+                    self.plugins_lock.acquire()
 
-                cursor.close()
+                    for plugin in self.plugins:
+                        group = self.plugins[plugin][1]
 
-                # defined by plugins
-                self.plugins_lock.acquire()
+                        if group != None:
+                            groups.add(group)
 
-                for plugin in self.plugins:
-                    group = self.plugins[plugin][1]
+                    self.plugins_lock.release()
 
-                    if group != None:
-                        groups.add(group)
+                    groups_str = ', '.join(groups) if len(groups) > 1 else '(none)'
 
-                self.plugins_lock.release()
-
-                groups_str = ', '.join(groups) if len(groups) > 1 else '(none)'
-
-                self.send_ok(channel, f'Defined groups: {groups_str}')
+                    self.send_ok(channel, f'Defined groups: {groups_str}')
 
             except Exception as e:
                 self.send_error(channel, f'listgroups: exception "{e}" at line number: {e.__traceback__.tb_lineno}')
@@ -1010,58 +1160,55 @@ class ghbot(ircbot):
                 which = splitted_args[1]
                 group = splitted_args[2]
 
-                cursor = self.db.db.cursor()
+                with self.db.db.cursor() as cursor:
+                    if which.lower() == 'commands':
+                        cursor.execute('SELECT command FROM acls WHERE who=%s', (group,))
 
-                if which.lower() == 'commands':
-                    cursor.execute('SELECT command FROM acls WHERE who=%s', (group,))
+                        commands = set()
 
-                    commands = set()
+                        # defined by sysop(s)
+                        for row in cursor.fetchall():
+                            commands.add(row[0])
 
-                    # defined by sysop(s)
-                    for row in cursor.fetchall():
-                        commands.add(row[0])
+                        # defined by plugins
+                        self.plugins_lock.acquire()
 
-                    # defined by plugins
-                    self.plugins_lock.acquire()
+                        for plugin in self.plugins:
+                            if self.plugins[plugin][1] == group:
+                                commands.add(plugin)
 
-                    for plugin in self.plugins:
-                        if self.plugins[plugin][1] == group:
-                            commands.add(plugin)
+                        self.plugins_lock.release()
 
-                    self.plugins_lock.release()
+                        commands_str = ', '.join(commands)
 
-                    cursor.close()
+                        self.send_ok(channel, f'Commands in group {group}: {commands_str}')
 
-                    commands_str = ', '.join(commands)
+                    elif which.lower() == 'members':
+                        cursor.execute('SELECT who FROM acl_groups WHERE group_name=%s', (group,))
 
-                    self.send_ok(channel, f'Commands in group {group}: {commands_str}')
+                        members = set()
 
-                elif which.lower() == 'members':
-                    cursor.execute('SELECT who FROM acl_groups WHERE group_name=%s', (group,))
+                        for row in cursor.fetchall():
+                            member = row[0]
 
-                    members = set()
+                            if '!' in member:
+                                member = member[0:member.find('!')]
 
-                    for row in cursor.fetchall():
-                        member = row[0]
+                            members.add(member)
 
-                        if '!' in member:
-                            member = member[0:member.find('!')]
+                        members_str = ', '.join(members)
 
-                        members.add(member)
+                        self.send_ok(channel, f'Members in group {group}: {members_str}')
 
-                    cursor.close()
-
-                    members_str = ', '.join(members)
-
-                    self.send_ok(channel, f'Members in group {group}: {members_str}')
-
-            else:
-                self.send_error(channel, 'Command is: showgroup members|commands <groupname>')
+                    else:
+                        self.send_error(channel, 'Command is: showgroup members|commands <groupname>')
 
             return self.internal_command_rc.HANDLED
 
         elif command == 'apro':
             matching = set()
+
+            verbose = '-v' in splitted_args
 
             which = splitted_args[1].lower()
 
@@ -1073,14 +1220,32 @@ class ghbot(ircbot):
                 if which in plugin:
                     matching.add(plugin)
 
-            for alias_define in self.find_alias_define_by_substring(which):
-                matching.add(f'{alias_define[0]} ({alias_define[1]}, {alias_define[2]})')
+            rc, err = self.find_alias_define_by_substring(which)
 
-            if len(matching) == 0:
-                self.send_ok(channel, f'Nothing matches with "{which}"')
+            if err != None:
+                self.send_error(channel, f'Apro: {err}')
 
             else:
-                self.send_ok(channel, 'Try one of the following: ' + ', '.join(matching))
+                if verbose:
+                    for alias_define in rc:
+                        matching.add(f'{alias_define[0]} ({alias_define[1]}, {alias_define[2]})')
+
+                elif len(matching) == 0:
+                    defines = set()
+
+                    for alias_define in rc:  # de-duplicate
+                        defines.add(alias_define[0])
+
+                    for define in defines:
+                        matching.add(f'{define}')  # maybe add some schmuck?
+
+                if len(matching) == 0:
+                    suggestions = set([x for x in self.similar_to(which) if x != None])
+
+                    self.send_error(channel, f'Nothing matches with "{which}" (maybe {" or ".join(suggestions)}?)')
+
+                else:
+                    self.send_ok(channel, f'Apro "{which}": ' + ', '.join(matching))
 
             return self.internal_command_rc.HANDLED
 
@@ -1122,7 +1287,7 @@ class ghbot(ircbot):
 
             return self.internal_command_rc.HANDLED
 
-        elif self.local_plugins.process(identifier, (prefix, command, splitted_args, channel)):
+        elif self.local_plugins.process(prefix, (prefix, command, splitted_args, channel)):
             return self.internal_command_rc.HANDLED
 
         return self.internal_command_rc.NOT_INTERNAL
@@ -1131,20 +1296,18 @@ class ghbot(ircbot):
         try:
             self.db.probe()
 
-            cursor = self.db.db.cursor()
-            cursor.execute('SELECT command, is_command, nr FROM aliasses WHERE command like %s', (f'%%{which}%%',))
+            with self.db.db.cursor() as cursor:
+                cursor.execute('SELECT command, is_command, nr FROM aliasses WHERE command like %s', (f'%%{which}%%',))
 
-            rows = []
+                rows = []
 
-            for row in cursor:
-                rows.append((row[0], 'alias' if row[1] == 1 else 'define', row[2]))
+                for row in cursor:
+                    rows.append((row[0], 'alias' if row[1] == 1 else 'define', row[2]))
 
-            return rows
+                return (rows, None)
 
         except Exception as e:
-            self.send_error(self.error_ch, f'irc::add_define: failed to insert alias ({e})')
-
-        return [ ]
+            return (rows, f'irc::add_define: failed to insert alias ({e})')
 
     def irc_command_insertion_point(self, prefix, command, arguments):
         if command in [ 'JOIN', 'PART', 'KICK', 'NICK', 'QUIT' ]:
@@ -1167,7 +1330,7 @@ db = dbi(config['db']['host'], config['db']['user'], config['db']['password'], c
 m = mqtt_handler(config['mqtt']['host'], config['mqtt']['prefix'])
 
 # host, port, nick, channel, m, db, command_prefix
-g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'], 'plugins')
+g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['password'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'], 'plugins')
 
 ka = irc_keepalive(g)
 
