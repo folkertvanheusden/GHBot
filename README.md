@@ -18,4 +18,5 @@ See https://nurdspace.nl/GHBot for more documentation.
 
 (c) 2022-2023 by Folkert van Heusden <mail@vanheusden.com>
 
-This software is released into the public domain.
+This software is released into the public domain. For Europe
+that is the CC0 license if I understood it correctly.
