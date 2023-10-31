@@ -98,6 +98,7 @@ class ircbot(threading.Thread):
         self.channels    = channels
 
         self.joined_ch   = dict()
+        self.next        = dict()
 
         self.fd          = None
 
@@ -117,6 +118,7 @@ class ircbot(threading.Thread):
 
         for channel in channels:
             self.joined_ch[channel] = False
+            self.next     [channel] = False
 
     def _set_state(self, s):
         print(f'_set_state: state changes from {self.state} to {s}')
@@ -304,11 +306,23 @@ class ircbot(threading.Thread):
                 text    = args[1]
 
                 if text[0] == self.cmd_prefix:
-                    for i in range(0, 8):  # to prevent infinite alias-loops
-                        is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix, True)
+                    if text[1:] == 'next':
+                        if len(self.next[channel]) > 0:
+                            new_text = self.next[channel][0]
+                            del self.next[channel][0]
 
-                        if new_text != None:
-                            text = self.cmd_prefix + new_text
+                            self.send_notice(channel, new_text)
+                            return
+
+                    else:
+                        self.next[channel] = []
+
+                        for i in range(0, 8):  # to prevent infinite alias-loops
+                            rc = self.check_aliasses(text[1:], prefix, True)
+
+                            if rc != None:
+                                is_command, new_text, is_notice = rc[0]
+                                text = self.cmd_prefix + new_text
 
                 if text[0] == self.cmd_prefix:
                     parts   = text[1:].split(' ')
@@ -332,9 +346,14 @@ class ircbot(threading.Thread):
                             method(channel, f'{nick}: command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
 
                         else:
-                            is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix, False)
+                            rc = self.check_aliasses(text[1:], prefix, False)
 
-                            if new_text != None:
+                            if rc != None:
+                                is_command, new_text, is_notice = rc[0]
+
+                                if len(rc) > 1:
+                                    self.next[channel] = [row[1] for row in rc[1:]]
+
                                 if is_notice:
                                     self.send_notice(channel, new_text)
 

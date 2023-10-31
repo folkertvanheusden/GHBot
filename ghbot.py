@@ -696,55 +696,58 @@ class ghbot(ircbot):
         command = parts[0]
 
         with self.db.db.cursor() as cursor:
-            cursor.execute('SELECT is_command, replacement_text FROM aliasses WHERE command=%s AND is_command=%s ORDER BY RAND() LIMIT 1', (command.lower(), 1 if is_command else 0))
+            cursor.execute('SELECT is_command, replacement_text FROM aliasses WHERE command=%s AND is_command=%s ORDER BY RAND() LIMIT 100', (command.lower(), 1 if is_command else 0))
 
-            row = cursor.fetchone()
+            rows = cursor.fetchall()
+            if len(rows) == 0:
+                return None
 
-            if row == None:
-                return (False, None, False)
+            rc = []
 
-            is_command = row[0]
-            repl_text  = row[1]
+            for row in rows:
+                is_command = row[0]
+                repl_text  = row[1]
 
-            space      = text.find(' ')
+                space      = text.find(' ')
+                if space == -1:
+                    query_text = username
 
-            if space == -1:
-                query_text = username
+                    if '!' in query_text:
+                        query_text = query_text[0:query_text.find('!')]
 
-                if '!' in query_text:
-                    query_text = query_text[0:query_text.find('!')]
+                else:
+                    query_text = text[space + 1:]
 
-            else:
-                query_text = text[space + 1:]
+                if is_command:  # initially only replaces command
+                    text = repl_text + ' ' + query_text
 
-            if is_command:  # initially only replaces command
-                text = repl_text + ' ' + query_text
+                else:
+                    text = repl_text
 
-            else:
-                text = repl_text
+                text = self.escapes(text)
 
-            text = self.escapes(text)
+                if username != None:
+                    exclamation_mark = username.find('!')
 
-            if username != None:
-                exclamation_mark = username.find('!')
+                    if exclamation_mark != -1:
+                        username = username[0:exclamation_mark]
 
-                if exclamation_mark != -1:
-                    username = username[0:exclamation_mark]
+                    text = text.replace('%u', username)
 
-                text = text.replace('%u', username)
+                text = text.replace('%q', query_text)
 
-            text = text.replace('%q', query_text)
+                text = text.replace('%r', username)  # TODO previously this was a random user
 
-            text = text.replace('%r', username)  # TODO previously this was a random user
+                notice = False
 
-            notice = False
+                if '%n' in text:
+                    text = text.replace('%n', '')
 
-            if '%n' in text:
-                text = text.replace('%n', '')
+                    notice = True
 
-                notice = True
+                rc.append((is_command, text, notice))
 
-            return (is_command, text, notice)
+            return rc
 
     def invoke_internal_commands(self, prefix, command, splitted_args, channel):
         identifier  = None
