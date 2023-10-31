@@ -15,7 +15,7 @@ INSERT INTO `acls` VALUES ('sysops','addacl'),('sysops','delacl'),('sysops','gro
 CREATE TABLE `aliasses` (
   `command` varchar(256) COLLATE utf8mb4_unicode_ci NOT NULL,
   `is_command` tinyint(1) DEFAULT 0,
-  `replacement_text` varchar(256) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `replacement_text` TEXT COLLATE utf8mb4_unicode_ci NOT NULL,
   `nr` int(12) NOT NULL AUTO_INCREMENT,
   PRIMARY KEY (`nr`),
   KEY `command` (`command`)
