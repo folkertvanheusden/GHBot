@@ -43,29 +43,29 @@ class ghbot(ircbot):
         now                = time.time()
 
         #                          v make these into dictionaries v  TODO
-        self.plugins['addacl']   = ['Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['delacl']   = ['Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['deluser']  = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['meet']     = ['Use this when a user (nick) has a new hostname: meet <nick>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['merge']    = ['Use this to add a host-alias for an existing user (nick): merge <new-nick> <old-nick>', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['commands'] = ['Show list of known commands', None, now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['define']   = ['Define a command that will be replied to with a definable text, format: !define <command> <text... with %m (/me), %q (parameters) and %u (nick of invoker) escapes, %n for notice>', None, now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['deldefine']= ['Delete a define (by number)', None, now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['alias']    = ['Add a different name for a command, format: !alias <newname> <oldname>', None, now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['searchdefine'] = ['Search for defines that match a partial text', None, now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['searchalias'] = ['Search for aliases that match a partial text', None, now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['viewalias'] = ['Show what an alias is doing', None, now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['apro']     = ['Show commands that match a partial text', None, now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['reloadlp'] = ['Reload a "local" plugin', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['listlp']   = ['List "local" plugins', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['showlp']   = ['Show commands of a "local" plugin', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
-        self.plugins['loadlp']   = ['Load "local" plugins that are not loaded yet', 'sysops', now, 'Flok', 'harkbot.vm.nurd.space']
+        self.plugins['addacl']   = ['Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops', now, 'root', 'localhost']
+        self.plugins['delacl']   = ['Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops', now, 'root', 'localhost']
+        self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now, 'root', 'localhost']
+        self.plugins['deluser']  = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'root', 'localhost']
+        self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now, 'root', 'localhost']
+        self.plugins['meet']     = ['Use this when a user (nick) has a new hostname: meet <nick>', 'sysops', now, 'root', 'localhost']
+        self.plugins['merge']    = ['Use this to add a host-alias for an existing user (nick): merge <new-nick> <old-nick>', 'sysops', now, 'root', 'localhost']
+        self.plugins['commands'] = ['Show list of known commands', None, now, 'root', 'localhost']
+        self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'root', 'localhost']
+        self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'root', 'localhost']
+        self.plugins['define']   = ['Define a command that will be replied to with a definable text, format: !define <command> <text... with %m (/me), %q (parameters) and %u (nick of invoker) escapes, %n for notice>', None, now, 'root', 'localhost']
+        self.plugins['deldefine']= ['Delete a define (by number)', None, now, 'root', 'localhost']
+        self.plugins['alias']    = ['Add a different name for a command, format: !alias <newname> <oldname>', None, now, 'root', 'localhost']
+        self.plugins['searchdefine'] = ['Search for defines that match a partial text', None, now, 'root', 'localhost']
+        self.plugins['searchalias'] = ['Search for aliases that match a partial text', None, now, 'root', 'localhost']
+        self.plugins['viewalias'] = ['Show what an alias is doing', None, now, 'root', 'localhost']
+        self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now, 'root', 'localhost']
+        self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now, 'root', 'localhost']
+        self.plugins['apro']     = ['Show commands that match a partial text', None, now, 'root', 'localhost']
+        self.plugins['reloadlp'] = ['Reload a "local" plugin', 'sysops', now, 'root', 'localhost']
+        self.plugins['listlp']   = ['List "local" plugins', 'sysops', now, 'root', 'localhost']
+        self.plugins['showlp']   = ['Show commands of a "local" plugin', 'sysops', now, 'root', 'localhost']
+        self.plugins['loadlp']   = ['Load "local" plugins that are not loaded yet', 'sysops', now, 'root', 'localhost']
 
         self.hardcoded_plugins = set()
         for p in self.plugins:
@@ -1327,14 +1327,14 @@ config.read(sys.argv[1])
 db = dbi(config['db']['host'], config['db']['user'], config['db']['password'], config['db']['database'])
 
 # broker_ip, topic_prefix
-m = mqtt_handler(config['mqtt']['host'], config['mqtt']['prefix'])
+m = mqtt_handler(config['mqtt']['host'], int(config['mqtt']['port']), config['mqtt']['prefix'])
 
 # host, port, nick, channel, m, db, command_prefix
 g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['password'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'], 'plugins')
 
 ka = irc_keepalive(g)
 
-h = http_server(8000, g)
+h = http_server(int(config['httpd']['port']), g)
 
 print('Go!')
 

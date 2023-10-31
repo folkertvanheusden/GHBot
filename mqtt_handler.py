@@ -6,7 +6,7 @@ import time
 
 
 class mqtt_handler(threading.Thread):
-    def __init__(self, broker_ip, topic_prefix):
+    def __init__(self, broker_ip, broker_port, topic_prefix):
         super().__init__()
 
         self.client = mqtt.Client()
@@ -20,7 +20,7 @@ class mqtt_handler(threading.Thread):
 
         while True:
             try:
-                self.client.connect(broker_ip, 1883, 60)
+                self.client.connect(broker_ip, broker_port, 60)
 
                 break
 
