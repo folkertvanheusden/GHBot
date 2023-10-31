@@ -305,18 +305,9 @@ class ircbot(threading.Thread):
 
                 if text[0] == self.cmd_prefix:
                     for i in range(0, 8):  # to prevent infinite alias-loops
-                        is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix)
+                        is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix, True)
 
                         if new_text != None:
-                            if not is_command:
-                                if is_notice:
-                                    self.send_notice(channel, new_text)
-
-                                else:
-                                    self.send_ok(channel, new_text)
-
-                                return
-
                             text = self.cmd_prefix + new_text
 
                 if text[0] == self.cmd_prefix:
@@ -341,6 +332,17 @@ class ircbot(threading.Thread):
                             method(channel, f'{nick}: command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
 
                         else:
+                            is_command, new_text, is_notice = self.check_aliasses(text[1:], prefix, False)
+
+                            if new_text != None:
+                                if is_notice:
+                                    self.send_notice(channel, new_text)
+
+                                else:
+                                    self.send_ok(channel, new_text)
+
+                                return
+
                             suggestions = set([x for x in self.similar_to(command) if x != None])
 
                             method(channel, f'{nick}: command "{command}" is not known (maybe {" or ".join(suggestions)}?)')

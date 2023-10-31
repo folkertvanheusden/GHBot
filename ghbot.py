@@ -649,7 +649,7 @@ class ghbot(ircbot):
 
         with self.db.db.cursor() as cursor:
             try:
-                cursor.execute('select command from aliasses where command sounds like %s', (wrong,))
+                cursor.execute('SELECT command FROM aliasses WHERE command SOUNDS LIKE %s', (wrong,))
 
                 row = cursor.fetchone()
 
@@ -691,12 +691,12 @@ class ghbot(ircbot):
 
         return text
 
-    def check_aliasses(self, text, username):
+    def check_aliasses(self, text, username, is_command):
         parts   = text.split(' ')
         command = parts[0]
 
         with self.db.db.cursor() as cursor:
-            cursor.execute('SELECT is_command, replacement_text FROM aliasses WHERE command=%s ORDER BY RAND() LIMIT 1', (command.lower(), ))
+            cursor.execute('SELECT is_command, replacement_text FROM aliasses WHERE command=%s AND is_command=%s ORDER BY RAND() LIMIT 1', (command.lower(), 1 if is_command else 0))
 
             row = cursor.fetchone()
 
@@ -734,6 +734,8 @@ class ghbot(ircbot):
                 text = text.replace('%u', username)
 
             text = text.replace('%q', query_text)
+
+            text = text.replace('%r', username)  # TODO previously this was a random user
 
             notice = False
 
