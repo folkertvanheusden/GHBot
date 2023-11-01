@@ -88,8 +88,10 @@ class ircbot(threading.Thread):
 
     state_timeout = 30         # state changes must not take longer than this
 
-    def __init__(self, host, port, nick, password, channels):
+    def __init__(self, host, port, nick, password, channels, use_notice):
         super().__init__()
+
+        self.use_notice  = use_notice
 
         self.host        = host
         self.port        = port
@@ -114,7 +116,7 @@ class ircbot(threading.Thread):
         self.topics      = dict()
 
         self.more_priv   = more(self, 'PRIVMSG', channels)
-        self.more_noti   = more(self, 'NOTICE',  channels)
+        self.more_noti   = more(self, 'NOTICE' if use_notice else 'PRIVMSG',  channels)
 
         for channel in channels:
             self.joined_ch[channel] = False

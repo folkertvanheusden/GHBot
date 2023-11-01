@@ -25,8 +25,8 @@ class ghbot(ircbot):
         ERROR        = 0x10
         NOT_INTERNAL = 0xff
 
-    def __init__(self, host, port, nick, password, channels, m, db, cmd_prefix, local_plugin_subdir):
-        super().__init__(host, port, nick, password, channels)
+    def __init__(self, host, port, nick, password, channels, m, db, cmd_prefix, local_plugin_subdir, use_notice):
+        super().__init__(host, port, nick, password, channels, use_notice)
 
         self.cmd_prefix    = cmd_prefix
 
@@ -1338,7 +1338,7 @@ db = dbi(config['db']['host'], config['db']['user'], config['db']['password'], c
 m = mqtt_handler(config['mqtt']['host'], int(config['mqtt']['port']), config['mqtt']['prefix'])
 
 # host, port, nick, channel, m, db, command_prefix
-g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['password'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'], 'plugins')
+g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['password'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'], 'plugins', config['general']['use-notice'].lower() == 'true')
 
 ka = irc_keepalive(g)
 
