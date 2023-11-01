@@ -20,3 +20,9 @@ CREATE TABLE `aliasses` (
   PRIMARY KEY (`nr`),
   KEY `command` (`command`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `account_aliasses` (
+  `main_account` varchar(256) NOT NULL,
+  `account` varchar(256) NOT NULL,
+  PRIMARY KEY (`main_account`,`account`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
