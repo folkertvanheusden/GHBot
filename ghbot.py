@@ -53,6 +53,7 @@ class ghbot(ircbot):
         self.plugins['commands'] = ['Show list of known commands', None, now, 'root', 'localhost']
         self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'root', 'localhost']
         self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'root', 'localhost']
+        self.plugins['next']     = ['Execute next command from a list', None, now, 'root', 'localhost']
         self.plugins['define']   = ['Define a command that will be replied to with a definable text, format: !define <command> <text... with %m (/me), %q (parameters) and %u (nick of invoker) escapes, %n for notice>', None, now, 'root', 'localhost']
         self.plugins['deldefine']= ['Delete a define (by number)', None, now, 'root', 'localhost']
         self.plugins['alias']    = ['Add a different name for a command, format: !alias <newname> <oldname>', None, now, 'root', 'localhost']
@@ -702,21 +703,21 @@ class ghbot(ircbot):
             if len(rows) == 0:
                 return None
 
+            space = text.find(' ')
+            if space == -1:
+                query_text = username
+
+                if '!' in query_text:
+                    query_text = query_text[0:query_text.find('!')]
+
+            else:
+                query_text = text[space + 1:]
+
             rc = []
 
             for row in rows:
                 is_command = row[0]
                 repl_text  = row[1]
-
-                space      = text.find(' ')
-                if space == -1:
-                    query_text = username
-
-                    if '!' in query_text:
-                        query_text = query_text[0:query_text.find('!')]
-
-                else:
-                    query_text = text[space + 1:]
 
                 if is_command:  # initially only replaces command
                     text = repl_text + ' ' + query_text
@@ -733,8 +734,10 @@ class ghbot(ircbot):
                         username = username[0:exclamation_mark]
 
                     text = text.replace('%u', username)
+                    text = text.replace('%U', username.upper())
 
                 text = text.replace('%q', query_text)
+                text = text.replace('%Q', query_text.upper())
 
                 text = text.replace('%r', username)  # TODO previously this was a random user
 

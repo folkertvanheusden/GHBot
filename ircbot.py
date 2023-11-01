@@ -310,9 +310,11 @@ class ircbot(threading.Thread):
                         if len(self.next[channel]) > 0:
                             new_text = self.next[channel][0]
                             del self.next[channel][0]
-
-                            self.send_notice(channel, new_text)
+                            self.send_notice(channel, new_text[1])
                             return
+
+                        else:
+                            self.send_ok(channel, 'No more "next" queued.')
 
                     else:
                         self.next[channel] = []
@@ -352,7 +354,7 @@ class ircbot(threading.Thread):
                                 is_command, new_text, is_notice = rc[0]
 
                                 if len(rc) > 1:
-                                    self.next[channel] = [row[1] for row in rc[1:]]
+                                    self.next[channel] = rc[1:]
 
                                 if is_notice:
                                     self.send_notice(channel, new_text)
