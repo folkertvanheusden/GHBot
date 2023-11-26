@@ -322,7 +322,7 @@ class ircbot(threading.Thread):
                         self.next[channel] = []
 
                         for i in range(0, 8):  # to prevent infinite alias-loops
-                            rc = self.check_aliasses(text[1:], prefix, True)
+                            rc = self.check_aliasses(text[1:], prefix, True, channel)
 
                             if rc != None:
                                 is_command, new_text, is_notice = rc[0]
@@ -350,7 +350,7 @@ class ircbot(threading.Thread):
                             method(channel, f'{nick}: command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
 
                         else:
-                            rc = self.check_aliasses(text[1:], prefix, False)
+                            rc = self.check_aliasses(text[1:], prefix, False, channel)
 
                             if rc != None:
                                 is_command, new_text, is_notice = rc[0]

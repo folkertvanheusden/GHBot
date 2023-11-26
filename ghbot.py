@@ -692,7 +692,7 @@ class ghbot(ircbot):
 
         return text
 
-    def check_aliasses(self, text, username, is_command):
+    def check_aliasses(self, text, username, is_command, channel):
         parts   = text.split(' ')
         command = parts[0]
 
@@ -736,10 +736,36 @@ class ghbot(ircbot):
                     text = text.replace('%u', username)
                     text = text.replace('%U', username.upper())
 
-                text = text.replace('%q', query_text)
-                text = text.replace('%Q', query_text.upper())
+                if len(query_text) > 0:
+                    text = text.replace('%q', query_text)
+                    text = text.replace('%Q', query_text.upper())
+
+                    text = text.replace('%d', query_text.split()[0])
+                    text = text.replace('%D', query_text.split()[0].upper())
+
+                text = text.replace('%c', channel)
+                text = text.replace('%C', channel.upper())
 
                 text = text.replace('%r', username)  # TODO previously this was a random user
+
+                if '%h' in text:
+                    text = text.replace('%h:none',  '\003')
+                    text = text.replace('%h:white', '\0030')
+                    text = text.replace('%h:black', '\0031')
+                    text = text.replace('%h:blue', '\0032')
+                    text = text.replace('%h:green', '\0033')
+                    text = text.replace('%h:red', '\0034')
+                    text = text.replace('%h:brown', '\0035')
+                    text = text.replace('%h:purple', '\0036')
+                    text = text.replace('%h:orange', '\0037')
+                    text = text.replace('%h:yellow', '\0038')
+                    text = text.replace('%h:light-green', '\0039')
+                    text = text.replace('%h:cyan', '\00310')
+                    text = text.replace('%h:light-cyan', '\00311')
+                    text = text.replace('%h:light-blue', '\00312')
+                    text = text.replace('%h:pink', '\00313')
+                    text = text.replace('%h:grey', '\00314')
+                    text = text.replace('%h:light-grey', '\00315')
 
                 notice = False
 
