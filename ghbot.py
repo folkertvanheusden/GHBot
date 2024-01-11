@@ -1345,7 +1345,10 @@ class ghbot(ircbot):
 
     def irc_command_insertion_point(self, prefix, command, arguments):
         if command.upper() in [ 'JOIN', 'PART', 'KICK', 'NICK', 'QUIT', 'MODE' ] or command.isnumeric():
-            self.mqtt.publish(f'from/irc/{arguments[0][1:]}/{prefix}/{command}', ' '.join(arguments))
+            ch = arguments[0]
+            if ch == '#':
+                ch = ch[1:]
+            self.mqtt.publish(f'from/irc/{ch}/{prefix}/{command}', ' '.join(arguments))
 
         return True
 
