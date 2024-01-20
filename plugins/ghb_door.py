@@ -92,7 +92,7 @@ def process(ghbot_instance, nick, parameters):
 
 def get_commandos():
     return [
-            ('open_door', ['Open the front door', 'doorcontrol', 0, 'Flok', 'local plugin']),
-            ('lock_door', ['Lock the front door', 'doorcontrol', 0, 'Flok', 'local plugin']),
-            ('unlock_door', ['Unlock the front door', 'doorcontrol', 0, 'Flok', 'local plugin'])
+            ('open_door', ['Open the front door', 'doorcontrol', 0, 'Flok', 'local plugin', 'door']),
+            ('lock_door', ['Lock the front door', 'doorcontrol', 0, 'Flok', 'local plugin', 'door']),
+            ('unlock_door', ['Unlock the front door', 'doorcontrol', 0, 'Flok', 'local plugin', 'door'])
             ]
