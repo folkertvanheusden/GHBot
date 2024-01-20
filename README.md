@@ -4,13 +4,13 @@ e.g.:
 
     INSERT INTO acls VALUES('nickname!username@host', 'sysops');
 
-
 ghbot.sql contains the database schema.
-
 
 ghbot.py is the main program.
 
 You may need to install python3-mysqldb, python3-paho-mqtt and nltk.
+
+If you don't run NURDSpace then delete plugins/ghb_door.py :-)
 
 
 See https://nurdspace.nl/GHBot for more documentation.
