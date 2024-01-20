@@ -70,6 +70,8 @@ class ghbot(ircbot):
         self.plugins['helpgroups'] = ['Show a list of all help-groups there are; a help-group is usually per-plugin', None, now, 'root', 'localhost', 'help']
         self.plugins['showhelpgroup'] = ['Show plugins in a help-group', None, now, 'root', 'localhost', 'help']
 
+        self.prio_plugins = ('help', 'helpgroups', 'showhelpgroup')
+
         self.hardcoded_plugins = set()
         for p in self.plugins:
             self.hardcoded_plugins.add(p)
@@ -590,12 +592,13 @@ class ghbot(ircbot):
 
     def list_plugins(self):
         self.plugins_lock.acquire()
-
-        plugins = ', '.join(sorted(self.plugins))
-
+        plugins = sorted(self.plugins)
         self.plugins_lock.release()
 
-        return plugins
+        for prio in self.prio_plugins:
+            plugins.remove(prio)
+
+        return ', '.join(list(self.prio_plugins) + plugins)
 
     def add_define(self, command, is_alias, arguments):
         self.db.probe()
