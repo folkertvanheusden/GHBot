@@ -1115,7 +1115,7 @@ class ghbot(ircbot):
             plugin_set = set(plugin_list)  # make unique
             plugin_list = [x for x in plugin_set if not x is None]  # strip None
 
-            self.send_ok(channel, f'Command groups: {", ".join(plugin_list)}')
+            self.send_ok(channel, f'Command groups: {", ".join(sorted(plugin_list))}')
 
             self.plugins_lock.release()
 
@@ -1131,7 +1131,7 @@ class ghbot(ircbot):
                 plugin_set = set(plugin_list)  # make unique
                 plugin_list = [x for x in plugin_set if not x is None]  # strip None
 
-                self.send_ok(channel, f'Commands in group {group}: {", ".join(plugin_list)}')
+                self.send_ok(channel, f'Commands in group {group}: {", ".join(sorted(plugin_list))}')
 
                 self.plugins_lock.release()
 
