@@ -43,30 +43,32 @@ class ghbot(ircbot):
         now                = time.time()
 
         #                          v make these into dictionaries v  TODO
-        self.plugins['addacl']   = ['Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops', now, 'root', 'localhost']
-        self.plugins['delacl']   = ['Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops', now, 'root', 'localhost']
-        self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now, 'root', 'localhost']
-        self.plugins['deluser']  = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'root', 'localhost']
-        self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now, 'root', 'localhost']
-        self.plugins['meet']     = ['Use this when a user (nick) has a new hostname: meet <nick>', 'sysops', now, 'root', 'localhost']
-        self.plugins['merge']    = ['Use this to add a host-alias for an existing user (nick): merge <new-nick> <old-nick>', 'sysops', now, 'root', 'localhost']
-        self.plugins['commands'] = ['Show list of known commands', None, now, 'root', 'localhost']
-        self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'root', 'localhost']
-        self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'root', 'localhost']
-        self.plugins['next']     = ['Execute next command from a list', None, now, 'root', 'localhost']
-        self.plugins['define']   = ['Define a command that will be replied to with a definable text, format: !define <command> <text... with %m (/me), %q (parameters) and %u (nick of invoker) escapes, %n for notice>', None, now, 'root', 'localhost']
-        self.plugins['deldefine']= ['Delete a define (by number)', None, now, 'root', 'localhost']
-        self.plugins['alias']    = ['Add a different name for a command, format: !alias <newname> <oldname>', None, now, 'root', 'localhost']
-        self.plugins['searchdefine'] = ['Search for defines that match a partial text', None, now, 'root', 'localhost']
-        self.plugins['searchalias'] = ['Search for aliases that match a partial text', None, now, 'root', 'localhost']
-        self.plugins['viewalias'] = ['Show what an alias is doing', None, now, 'root', 'localhost']
-        self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now, 'root', 'localhost']
-        self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now, 'root', 'localhost']
-        self.plugins['apro']     = ['Show commands that match a partial text', None, now, 'root', 'localhost']
-        self.plugins['reloadlp'] = ['Reload a "local" plugin', 'sysops', now, 'root', 'localhost']
-        self.plugins['listlp']   = ['List "local" plugins', 'sysops', now, 'root', 'localhost']
-        self.plugins['showlp']   = ['Show commands of a "local" plugin', 'sysops', now, 'root', 'localhost']
-        self.plugins['loadlp']   = ['Load "local" plugins that are not loaded yet', 'sysops', now, 'root', 'localhost']
+        self.plugins['addacl']   = ['Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops', now, 'root', 'localhost', 'acls']
+        self.plugins['delacl']   = ['Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops', now, 'root', 'localhost', 'acls']
+        self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now, 'root', 'localhost', 'acls']
+        self.plugins['deluser']  = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'root', 'localhost', 'acls']
+        self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now, 'root', 'localhost', 'acls']
+        self.plugins['meet']     = ['Use this when a user (nick) has a new hostname: meet <nick>', 'sysops', now, 'root', 'localhost', 'acls']
+        self.plugins['merge']    = ['Use this to add a host-alias for an existing user (nick): merge <new-nick> <old-nick>', 'sysops', now, 'root', 'localhost', 'acls']
+        self.plugins['commands'] = ['Show list of known commands', None, now, 'root', 'localhost', 'help']
+        self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'root', 'localhost', 'help']
+        self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'root', 'localhost', None]
+        self.plugins['next']     = ['Execute next command from a list', None, now, 'root', 'localhost', None]
+        self.plugins['define']   = ['Define a command that will be replied to with a definable text, format: !define <command> <text... with %m (/me), %q (parameters) and %u (nick of invoker) escapes, %n for notice>', None, now, 'root', 'localhost', 'defines']
+        self.plugins['deldefine']= ['Delete a define (by number)', None, now, 'root', 'localhost', 'defines']
+        self.plugins['alias']    = ['Add a different name for a command, format: !alias <newname> <oldname>', None, now, 'root', 'localhost', 'defines']
+        self.plugins['searchdefine'] = ['Search for defines that match a partial text', None, now, 'root', 'localhost', 'defines']
+        self.plugins['searchalias'] = ['Search for aliases that match a partial text', None, now, 'root', 'localhost', 'defines']
+        self.plugins['viewalias'] = ['Show what an alias is doing', None, now, 'root', 'localhost', 'defines']
+        self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now, 'root', 'localhost', 'acls']
+        self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now, 'root', 'localhost', 'acls']
+        self.plugins['apro']     = ['Show commands that match a partial text', None, now, 'root', 'localhost', 'help']
+        self.plugins['reloadlp'] = ['Reload a "local" plugin', 'sysops', now, 'root', 'localhost', None]
+        self.plugins['listlp']   = ['List "local" plugins', 'sysops', now, 'root', 'localhost', None]
+        self.plugins['showlp']   = ['Show commands of a "local" plugin', 'sysops', now, 'root', 'localhost', None]
+        self.plugins['loadlp']   = ['Load "local" plugins that are not loaded yet', 'sysops', now, 'root', 'localhost', None]
+        self.plugins['helpgroups'] = ['Show a list of all help-groups there are; a help-group is usually per-plugin', None, now, 'root', 'localhost', 'help']
+        self.plugins['showhelpgroup'] = ['Show plugins in a help-group', None, now, 'root', 'localhost', 'help']
 
         self.hardcoded_plugins = set()
         for p in self.plugins:
@@ -177,11 +179,12 @@ class ghbot(ircbot):
         try:
             elements = msg.split('|')
 
-            cmd       = None
-            descr     = ''
-            acl_group = None
-            athr      = ''
-            location  = ''
+            cmd        = None
+            descr      = ''
+            acl_group  = None
+            help_group = None
+            athr       = ''
+            location   = ''
 
             for element in elements:
                 k, v = element.split('=')
@@ -195,6 +198,9 @@ class ghbot(ircbot):
                 elif k == 'agrp':
                     acl_group = v
 
+                elif k == 'hgrp':
+                    help_group = v.lower()
+
                 elif k == 'athr':
                     athr = v
 
@@ -206,7 +212,7 @@ class ghbot(ircbot):
                     if not cmd in self.plugins:
                         print(f'_register_plugin: first announcement of {cmd}')
 
-                    self.plugins[cmd] = [descr, acl_group, time.time(), athr, location]
+                    self.plugins[cmd] = [descr, acl_group, time.time(), athr, location, help_group]
 
                     if cmd in self.plugins_gone:
                         del self.plugins_gone[cmd]
@@ -1099,6 +1105,40 @@ class ghbot(ircbot):
                 plugins = self.list_plugins()
 
                 self.send_ok(channel, f'Known commands: {plugins}')
+
+            return self.internal_command_rc.HANDLED
+
+        elif command == 'helpgroups':
+            self.plugins_lock.acquire()
+
+            plugin_list = [self.plugins[x][5] for x in self.plugins if len(self.plugins[x]) == 6]
+            plugin_set = set(plugin_list)  # make unique
+            plugin_list = [x for x in plugin_set if not x is None]  # strip None
+
+            self.send_ok(channel, f'Command groups: {", ".join(plugin_list)}')
+
+            self.plugins_lock.release()
+
+            return self.internal_command_rc.HANDLED
+
+        elif command == 'showhelpgroup':
+            if len(splitted_args) == 2:
+                group = splitted_args[1].lower()
+
+                self.plugins_lock.acquire()
+
+                plugin_list = [x for x in self.plugins if self.plugins[x][5] == group]
+                plugin_set = set(plugin_list)  # make unique
+                plugin_list = [x for x in plugin_set if not x is None]  # strip None
+
+                self.send_ok(channel, f'Commands in group {group}: {", ".join(plugin_list)}')
+
+                self.plugins_lock.release()
+
+                return self.internal_command_rc.HANDLED
+
+            else:
+                self.send_error(channel, f'{command} missing argument (group name)')
 
             return self.internal_command_rc.HANDLED
 
