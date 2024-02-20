@@ -86,7 +86,8 @@ class ircbot(threading.Thread):
         RUNNING        = 0xf0  # go
         DISCONNECTING  = 0xff
 
-    state_timeout = 30         # state changes must not take longer than this
+    state_timeout = 120         # state changes must not take longer than this
+    last_ping     = time.time() # last time a PING was sent
 
     def __init__(self, host, port, nick, password, channels, use_notice):
         super().__init__()
@@ -104,7 +105,7 @@ class ircbot(threading.Thread):
 
         self.fd          = None
 
-        self.owner       = 'flok'
+        self.owner       = 'melan'
 
         self.state       = self.session_state.DISCONNECTED
         self.state_since = time.time()
@@ -162,7 +163,7 @@ class ircbot(threading.Thread):
             self.more_priv.send_more(channel)
 
         else:
-            self.send_ok(channel, 'No more more')
+            self.send_ok(channel, "No more more (baby don't hurt me)")
 
     def send_error(self, channel, text):
         self.more_priv.send(channel, f'\3{4}ERROR: \2{text}')
@@ -213,6 +214,8 @@ class ircbot(threading.Thread):
         return self.internal_command_rc.NOT_INTERNAL
 
     def handle_irc_commands(self, prefix, command, args):
+        self.last_ping = time.time()
+
         if len(command) == 3 and command.isnumeric():
             if command == '001':
                 if self.state == self.session_state.USER_WAIT:
@@ -291,7 +294,7 @@ class ircbot(threading.Thread):
                 #print(f'{old_lower_prefix} => {new_prefix}')
 
             except Exception as e:
-                send_notice(self.owner, f'irc::handle_irc_command: exception "{e}" during execution of IRC command NICK at line number: {e.__traceback__.tb_lineno}')
+                self.send_notice(self.owner, f'irc::handle_irc_command: exception "{e}" during execution of IRC command NICK at line number: {e.__traceback__.tb_lineno}')
 
         elif command == 'PING':
             if len(args) >= 1:
@@ -299,6 +302,9 @@ class ircbot(threading.Thread):
 
             else:
                 self.send(f'PONG')
+            
+            print("irc::run: PONG")
+            self.last_ping = time.time()
 
         elif command == 'PRIVMSG':
             #print(args)
@@ -522,7 +528,7 @@ class ircbot(threading.Thread):
 
                     if lf_index == -1:
                         continue
-
+                
                 line = buffer[0:lf_index].rstrip('\r').strip()
                 buffer = buffer[lf_index + 1:]
 
@@ -552,13 +558,28 @@ class irc_keepalive(threading.Thread):
     def run(self):
         while True:
             try:
-                if self.i.get_state() == ircbot.session_state.RUNNING:
-                    self.i.send('TIME')
+                # if self.i.get_state() == ircbot.session_state.RUNNING:
+                #     self.i.send('TIME')
 
-                    time.sleep(30)
+                #     time.sleep(30)
 
-                else:
-                    time.sleep(5)
+                # else:
+                #     time.sleep(5)
+                last_ping = time.time() - self.i.last_ping
+                
+                if last_ping >= 800:
+                    print(f'irc_keepalive::run: no PING for {last_ping} seconds')
+                    # tell systemd to restart the service
+                    import os
+                    os.system('/usr/bin/sudo /bin/systemctl restart nurdbot.service')
+
+                
+                time.sleep(1)
+                # if time.time() - self.i.last_ping >= 300 or self.i.get_state() != ircbot.session_state.RUNNING:
+                #     print(f'irc_keepalive::run: no PING for {time.time() - self.i.last_ping} seconds')
+                #     # tell systemd to restart the service
+                #     import os
+                #     os.system('/usr/bin/sudo /bin/systemctl restart nurdbot.service')
 
             except Exception as e:
                 print(f'irc_keepalive::run: exception {e}')

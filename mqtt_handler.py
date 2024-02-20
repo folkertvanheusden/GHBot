@@ -9,7 +9,7 @@ class mqtt_handler(threading.Thread):
     def __init__(self, broker_ip, broker_port, topic_prefix):
         super().__init__()
 
-        self.client = mqtt.Client()
+        self.client = mqtt.Client('harkbot_ghbot_daemon', clean_session=False)
 
         self.topic_prefix = topic_prefix
 
