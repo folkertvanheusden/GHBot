@@ -1130,7 +1130,7 @@ class ghbot(ircbot):
 
                 self.plugins_lock.acquire()
 
-                plugin_list = [x for x in self.plugins if self.plugins[x][5] == group]
+                plugin_list = [x for x in self.plugins if len(self.plugins[x]) >= 6 and self.plugins[x][5] == group]
                 plugin_set = set(plugin_list)  # make unique
                 plugin_list = [x for x in plugin_set if not x is None]  # strip None
 
