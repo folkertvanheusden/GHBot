@@ -752,6 +752,12 @@ class ghbot(ircbot):
                     text = text.replace('%d', query_text.split()[0])
                     text = text.replace('%D', query_text.split()[0].upper())
 
+                    qt_space = query_text.find(' ')
+                    if qt_space != -1:
+                        temp = query_text[qt_space+1:].strip()
+                        text = text.replace('%e', temp)
+                        text = text.replace('%E', temp.upper())
+
                 text = text.replace('%c', channel)
                 text = text.replace('%C', channel.upper())
 
