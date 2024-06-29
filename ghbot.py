@@ -1032,6 +1032,11 @@ class ghbot(ircbot):
 
         elif command == 'searchdefine' or command == 'searchalias':
             if len(splitted_args) >= 2:
+                verbose = False
+                if splitted_args[1] == '-v':
+                    splitted_args = splitted_args[1:]  # !!
+                    verbose = True
+
                 found, ok, err = self.search_define(splitted_args[1])
 
                 if found != None:
@@ -1044,7 +1049,11 @@ class ghbot(ircbot):
                         else:
                             defines += ', '
 
-                        defines += f'{entry[0]}: {entry[1]}'
+                        if verbose:
+                            defines += f'{entry[1]}: {entry[2]}'
+
+                        else:
+                            defines += f'{entry[0]}: {entry[1]}'
 
                     self.send_ok(channel, defines)
 
