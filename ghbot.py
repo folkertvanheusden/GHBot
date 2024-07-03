@@ -677,12 +677,16 @@ class ghbot(ircbot):
 
         return results
 
-    def search_define(self, what):
+    def search_define(self, what, verbose):
         self.db.probe()
 
         with self.db.db.cursor() as cursor:
             try:
-                cursor.execute('SELECT command, nr, replacement_text FROM aliasses WHERE nr=%s OR command like %s ORDER BY nr DESC', (what, f'%%{what.lower()}%%',))
+                if verbose:
+                    cursor.execute('SELECT command, nr, replacement_text FROM aliasses WHERE nr=%s OR command like %s OR replacement_text like %s ORDER BY nr DESC', (what, f'%%{what.lower()}%%', f'%%{what}%%'))
+
+                else:
+                    cursor.execute('SELECT command, nr, replacement_text FROM aliasses WHERE nr=%s OR command like %s ORDER BY nr DESC', (what, f'%%{what.lower()}%%',))
 
                 results = []
 
@@ -1039,7 +1043,12 @@ class ghbot(ircbot):
 
         elif command == 'searchdefine' or command == 'searchalias':
             if len(splitted_args) >= 2:
-                found, ok, err = self.search_define(splitted_args[1])
+                verbose = False
+                if splitted_args[1] == '-v':
+                    splitted_args = splitted_args[1:]  # !!
+                    verbose = True
+
+                found, ok, err = self.search_define(splitted_args[1], verbose)
 
                 if found != None:
                     defines = None
@@ -1051,7 +1060,11 @@ class ghbot(ircbot):
                         else:
                             defines += ', '
 
-                        defines += f'{entry[0]}: {entry[1]}'
+                        if verbose:
+                            defines += f'{entry[1]}: {entry[2]}'
+
+                        else:
+                            defines += f'{entry[0]}: {entry[1]}'
 
                     self.send_ok(channel, defines)
 
@@ -1066,7 +1079,7 @@ class ghbot(ircbot):
 
         elif command == 'viewalias':
             if len(splitted_args) >= 2:
-                found, ok, err = self.search_define(splitted_args[1])
+                found, ok, err = self.search_define(splitted_args[1], False)
 
                 if found != None:
                     rc = f'{splitted_args[1]}: {found[0][2]}'
