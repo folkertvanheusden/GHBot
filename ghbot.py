@@ -670,12 +670,16 @@ class ghbot(ircbot):
 
         return results
 
-    def search_define(self, what):
+    def search_define(self, what, verbose):
         self.db.probe()
 
         with self.db.db.cursor() as cursor:
             try:
-                cursor.execute('SELECT command, nr, replacement_text FROM aliasses WHERE nr=%s OR command like %s ORDER BY nr DESC', (what, f'%%{what.lower()}%%',))
+                if verbose:
+                    cursor.execute('SELECT command, nr, replacement_text FROM aliasses WHERE nr=%s OR command like %s OR replacement_text like %s ORDER BY nr DESC', (what, f'%%{what.lower()}%%', f'%%{what}%%'))
+
+                else:
+                    cursor.execute('SELECT command, nr, replacement_text FROM aliasses WHERE nr=%s OR command like %s ORDER BY nr DESC', (what, f'%%{what.lower()}%%',))
 
                 results = []
 
@@ -751,6 +755,12 @@ class ghbot(ircbot):
 
                     text = text.replace('%d', query_text.split()[0])
                     text = text.replace('%D', query_text.split()[0].upper())
+
+                    qt_space = query_text.find(' ')
+                    if qt_space != -1:
+                        temp = query_text[qt_space+1:].strip()
+                        text = text.replace('%e', temp)
+                        text = text.replace('%E', temp.upper())
 
                 text = text.replace('%c', channel)
                 text = text.replace('%C', channel.upper())
@@ -1026,7 +1036,12 @@ class ghbot(ircbot):
 
         elif command == 'searchdefine' or command == 'searchalias':
             if len(splitted_args) >= 2:
-                found, ok, err = self.search_define(splitted_args[1])
+                verbose = False
+                if splitted_args[1] == '-v':
+                    splitted_args = splitted_args[1:]  # !!
+                    verbose = True
+
+                found, ok, err = self.search_define(splitted_args[1], verbose)
 
                 if found != None:
                     defines = None
@@ -1038,7 +1053,11 @@ class ghbot(ircbot):
                         else:
                             defines += ', '
 
-                        defines += f'{entry[0]}: {entry[1]}'
+                        if verbose:
+                            defines += f'{entry[1]}: {entry[2]}'
+
+                        else:
+                            defines += f'{entry[0]}: {entry[1]}'
 
                     self.send_ok(channel, defines)
 
@@ -1053,7 +1072,7 @@ class ghbot(ircbot):
 
         elif command == 'viewalias':
             if len(splitted_args) >= 2:
-                found, ok, err = self.search_define(splitted_args[1])
+                found, ok, err = self.search_define(splitted_args[1], False)
 
                 if found != None:
                     rc = f'{splitted_args[1]}: {found[0][2]}'
