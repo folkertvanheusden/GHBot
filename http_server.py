@@ -27,7 +27,7 @@ class http_requesthandler(BaseHTTPRequestHandler):
             page += '<h1>GHbot</h1>'
 
             page += '<h2>loaded plugins</h2>'
-            page += '<table>'
+            page += '<table border=1>'
             page += '<tr><th>command</th><th>group</th><th>author</th><th>location</th></tr>'
             page += '<tr><th colspan=4>description</th></tr>'
 
