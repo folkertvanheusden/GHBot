@@ -308,25 +308,36 @@ class ircbot(threading.Thread):
                 text    = args[1]
 
                 if text[0] == self.cmd_prefix:
-                    if text[1:] == 'next':
+                    if text[1:] == 'next' or text[1:6] == 'next ':
                         if len(self.next[channel]) > 0:
-                            new_text = self.next[channel][0]
-                            del self.next[channel][0]
-                            self.send_notice(channel, new_text[1])
+                            try:
+                                if '-a' in text:
+                                    new_text = ''
+                                    while len(new_text) < 450 and len(self.next[channel]) > 0:
+                                        if new_text != '':
+                                            new_text += ' / '
+                                        new_text += self.next[channel][0][1]
+                                        del self.next[channel][0]
+                                    self.send_notice(channel, new_text)
+                                else:
+                                    new_text = self.next[channel][0]
+                                    del self.next[channel][0]
+                                    self.send_notice(channel, new_text[1])
+                            except Exception as e:
+                                print(f'irc::handle_irc_command_thread_wrapper: exception "{e}" during execution of IRC command "{command}" at line number: {e.__traceback__.tb_lineno}')
                             return
 
                         else:
                             self.send_ok(channel, 'No more "next" queued.')
 
                     else:
-                        self.next[channel] = []
-
                         for i in range(0, 8):  # to prevent infinite alias-loops
                             rc = self.check_aliasses(text[1:], prefix, True, channel)
 
                             if rc != None:
                                 is_command, new_text, is_notice = rc[0]
                                 text = self.cmd_prefix + new_text
+                                self.next[channel] = []
 
                 if text[0] == self.cmd_prefix:
                     parts   = text[1:].split(' ')
