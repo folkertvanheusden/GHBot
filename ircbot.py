@@ -86,9 +86,10 @@ class ircbot(threading.Thread):
         RUNNING        = 0xf0  # go
         DISCONNECTING  = 0xff
 
-    state_timeout = 30         # state changes must not take longer than this
+    state_timeout = 120         # state changes must not take longer than this
+    last_ping     = time.time() # last time a PING was sent
 
-    def __init__(self, host, port, nick, password, channels, use_notice):
+    def __init__(self, host, port, nick, password, channels, use_notice, owner):
         super().__init__()
 
         self.use_notice  = use_notice
@@ -104,7 +105,7 @@ class ircbot(threading.Thread):
 
         self.fd          = None
 
-        self.owner       = 'flok'
+        self.owner       = owner
 
         self.state       = self.session_state.DISCONNECTED
         self.state_since = time.time()
@@ -120,7 +121,7 @@ class ircbot(threading.Thread):
 
         for channel in channels:
             self.joined_ch[channel] = False
-            self.next     [channel] = []
+            self.next     [channel] = False
 
     def _set_state(self, s):
         print(f'_set_state: state changes from {self.state} to {s}')
@@ -162,7 +163,7 @@ class ircbot(threading.Thread):
             self.more_priv.send_more(channel)
 
         else:
-            self.send_ok(channel, 'No more more')
+            self.send_ok(channel, "No more more (baby don't hurt me)")
 
     def send_error(self, channel, text):
         self.more_priv.send(channel, f'\3{4}ERROR: \2{text}')
@@ -213,234 +214,232 @@ class ircbot(threading.Thread):
         return self.internal_command_rc.NOT_INTERNAL
 
     def handle_irc_commands(self, prefix, command, args):
-        try:
-            if len(command) == 3 and command.isnumeric():
-                if command == '001':
-                    if self.state == self.session_state.USER_WAIT:
-                        self._set_state(self.session_state.CONNECTED_JOIN)
+        self.last_ping = time.time()
 
-                    else:
-                        print(f'irc::run: invalid state for "001" command {self.state}')
-
-                        self._set_state(self.session_state.DISCONNECTING)
-
-                elif command == '352':  # reponse to 'WHO'
-                    #print(prefix, command, args)
-                    self.users[args[5].lower()] = f'{args[5]}!{args[2]}@{args[3]}'
-
-                elif command == '353':  # users in the channel
-                    for user in args[3].split(' '):
-                        self.users[user.lower()] = '?'
-
-                elif command == '331' or command == '332':  # no topic set / topic
-                    self.topics[args[1][1:]] = args[2]
-
-                    self.mqtt.publish(f'from/irc/{args[1][1:]}/topic', args[2])
-
-                # 315 is 'end of who'
-                if command == '352' or command == '315':
-                    with self.cond_352:
-                        self.cond_352.notify_all()
-
-            elif command == 'JOIN':
-                if self.state == self.session_state.CONNECTED_WAIT:
-                    self.joined_ch[args[0]] = True
-
-                    all_joined = True
-
-                    for channel in self.joined_ch:
-                        if self.joined_ch[channel] == False:
-                            all_joined = False
-
-                            break
-
-                    if all_joined:
-                        self._set_state(self.session_state.RUNNING)
-
-                self.users[prefix.split('!')[0].lower()] = prefix.lower()
-
-            elif command == 'PART' or command == 'QUIT':
-                #print(prefix, command)
-                nick = prefix.split('!')[0].lower()
-
-                if nick in self.users:
-                    del self.users[nick]
-
-            elif command == 'KICK':
-                nick = args[1].lower()
-
-                if nick in self.users:
-                    del self.users[nick]
-
-            elif command == 'NICK':
-                try:
-                    old_lower_prefix = prefix.lower()
-
-                    excl_mark    = old_lower_prefix.find('!')
-
-                    old_user     = old_lower_prefix[0:excl_mark]
-
-                    if old_user in self.users:
-                        del self.users[old_user]
-                
-                    new_user     = args[0].lower()
-
-                    new_prefix   = new_user + old_lower_prefix[excl_mark:]
-
-                    self.users[new_user] = new_prefix
-
-                    #print(f'{old_lower_prefix} => {new_prefix}')
-
-                except Exception as e:
-                    send_notice(self.owner, f'irc::handle_irc_command: exception "{e}" during execution of IRC command NICK at line number: {e.__traceback__.tb_lineno}')
-
-            elif command == 'PING':
-                if len(args) >= 1:
-                    self.send(f'PONG {args[0]}')
+        if len(command) == 3 and command.isnumeric():
+            if command == '001':
+                if self.state == self.session_state.USER_WAIT:
+                    self._set_state(self.session_state.CONNECTED_JOIN)
 
                 else:
-                    self.send(f'PONG')
+                    print(f'irc::run: invalid state for "001" command {self.state}')
 
-            elif command == 'PRIVMSG':
-                #print(args)
+                    self._set_state(self.session_state.DISCONNECTING)
 
-                if len(args) >= 2 and len(args[1]) >= 2:
-                    channel = args[0]
-                    text    = args[1]
+            elif command == '352':  # reponse to 'WHO'
+                #print(prefix, command, args)
+                self.users[args[5].lower()] = f'{args[5]}!{args[2]}@{args[3]}'
 
-                    if text[0] == self.cmd_prefix:
-                        if text[1:] == 'next' or text[1:6] == 'next ':
-                            if len(self.next[channel]) > 0:
-                                if '-a' in text:
-                                    new_text = ''
-                                    while len(new_text) < 450 and len(self.next[channel]) > 0:
-                                        if new_text != '':
-                                            new_text += ' / '
-                                        new_text += self.next[channel][0][1]
-                                        del self.next[channel][0]
-                                    self.send_notice(channel, new_text)
-                                else:
-                                    new_text = self.next[channel][0]
-                                    del self.next[channel][0]
-                                    self.send_notice(channel, new_text[1])
-                                return
+            elif command == '353':  # users in the channel
+                for user in args[3].split(' '):
+                    self.users[user.lower()] = '?'
 
-                            else:
-                                self.send_ok(channel, 'No more "next" queued.')
+            elif command == '331' or command == '332':  # no topic set / topic
+                self.topics[args[1][1:]] = args[2]
 
-                        else:
-                            self.next[channel] = []
-                            for i in range(0, 8):  # to prevent infinite alias-loops
-                                rc = self.check_aliasses(text[1:], prefix, True, channel)
+                self.mqtt.publish(f'from/irc/{args[1][1:]}/topic', args[2])
 
-                                if rc != None:
-                                    is_command, new_text, is_notice = rc[0]
-                                    text = self.cmd_prefix + new_text
+            # 315 is 'end of who'
+            if command == '352' or command == '315':
+                with self.cond_352:
+                    self.cond_352.notify_all()
 
-                    if text[0] == self.cmd_prefix:
-                        parts   = text[1:].split(' ')
+        elif command == 'JOIN':
+            if self.state == self.session_state.CONNECTED_WAIT:
+                self.joined_ch[args[0]] = True
 
-                        command = parts[0]
+                all_joined = True
 
-                        if not command in self.plugins:
-                            nick = prefix.split('!')[0].lower()
-
-                            method = self.send_error_notice
-
-                            if channel == self.nick:
-                                channel = prefix
-
-                                if '!' in channel:
-                                    channel = channel[0:channel.find('!')]
-
-                                method = self.send_error
-
-                            if command in self.plugins_gone:
-                                method(channel, f'{nick}: command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
-
-                            else:
-                                rc = self.check_aliasses(text[1:], prefix, False, channel)
-
-                                if rc != None:
-                                    is_command, new_text, is_notice = rc[0]
-
-                                    if len(rc) > 1:
-                                        self.next[channel] = rc[1:]
-
-                                    if is_notice:
-                                        self.send_notice(channel, new_text)
-
-                                    else:
-                                        self.send_ok(channel, new_text)
-
-                                    return
-
-                                suggestions = set([x for x in self.similar_to(command) if x != None])
-
-                                method(channel, f'{nick}: command "{command}" is not known (maybe {" or ".join(suggestions)}?)')
-
-                        else:
-                            access_granted, group_for_command = self.check_acls(prefix, command)
-
-                            response_channel = (prefix[0:prefix.find('!')] if '!' in prefix else prefix) if channel == self.nick else channel
-
-                            if access_granted:
-                                # returns False when the command is not internal
-                                rc = self.invoke_internal_commands(prefix, command, parts, channel)
-
-                                if rc == self.internal_command_rc.HANDLED:
-                                    pass
-
-                                elif rc == self.internal_command_rc.NOT_INTERNAL:
-                                    if channel == self.nick:
-                                        person = prefix
-
-                                        if '!' in person:
-                                            person = person[0:person.find('!')]
-
-                                        self.mqtt.publish(f'from/irc/\\{person}/{prefix}/{command}', text)
-
-                                    else:
-                                        self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/{command}', text)
-
-                                elif rc == self.internal_command_rc.ERROR:
-                                    pass
-
-                                else:
-                                    self.send_error(response_channel, f'irc::run: unexpected return code from internal commands handler ({rc})')
-
-                            else:
-                                self.send_error(response_channel, f'Command "{command}" denied for user "{prefix}", one must be in {group_for_command}')
-
-                    else:
-                        self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/message', args[1])
-
-            elif command == 'NOTICE':
-                if len(args) >= 2:
-                    self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/notice', args[1])
-
-            elif command == 'TOPIC':
-                self.topics[args[0][1:]] = args[1]
-
-                self.mqtt.publish(f'from/irc/{args[0][1:]}/topic', args[1])
-
-            elif command == 'INVITE':
-                # do not enter any channel, only the selected
-                for channel in self.channels:
-                    if self.send(f'JOIN {channel}') == False:
-                        self._set_state(self.session_state.DISCONNECTING)
+                for channel in self.joined_ch:
+                    if self.joined_ch[channel] == False:
+                        all_joined = False
 
                         break
 
-            else:
-                print(f'irc::run: command "{command}" is not known (for {prefix})')
+                if all_joined:
+                    self._set_state(self.session_state.RUNNING)
 
-        except Exception as e:
-            msg = f'irc::handle_irc_commands: exception "{e}" during execution of IRC command "{command}" at line number: {e.__traceback__.tb_lineno}'
-            print(msg)
-            fh = open('log.txt', 'a')
-            fh.write(msg + '\n')
-            fh.close()
+            self.users[prefix.split('!')[0].lower()] = prefix.lower()
+
+        elif command == 'PART' or command == 'QUIT':
+            #print(prefix, command)
+            nick = prefix.split('!')[0].lower()
+
+            if nick in self.users:
+                del self.users[nick]
+
+        elif command == 'KICK':
+            nick = args[1].lower()
+
+            if nick in self.users:
+                del self.users[nick]
+
+        elif command == 'NICK':
+            try:
+                old_lower_prefix = prefix.lower()
+
+                excl_mark    = old_lower_prefix.find('!')
+
+                old_user     = old_lower_prefix[0:excl_mark]
+
+                if old_user in self.users:
+                    del self.users[old_user]
+            
+                new_user     = args[0].lower()
+
+                new_prefix   = new_user + old_lower_prefix[excl_mark:]
+
+                self.users[new_user] = new_prefix
+
+                #print(f'{old_lower_prefix} => {new_prefix}')
+
+            except Exception as e:
+                self.send_notice(self.owner, f'irc::handle_irc_command: exception "{e}" during execution of IRC command NICK at line number: {e.__traceback__.tb_lineno}')
+
+        elif command == 'PING':
+            if len(args) >= 1:
+                self.send(f'PONG {args[0]}')
+
+            else:
+                self.send(f'PONG')
+            
+            print("irc::run: PONG")
+            self.last_ping = time.time()
+
+        elif command == 'PRIVMSG':
+            #print(args)
+
+            if len(args) >= 2 and len(args[1]) >= 2:
+                channel = args[0]
+                text    = args[1]
+
+                if text[0] == self.cmd_prefix:
+                    if text[1:] == 'next' or text[1:6] == 'next ':
+                        if len(self.next[channel]) > 0:
+                            if '-a' in text:
+                                new_text = ''
+                                while len(new_text) < 450 and len(self.next[channel]) > 0:
+                                    if new_text != '':
+                                        new_text += ' / '
+                                    new_text += self.next[channel][0][1]
+                                    del self.next[channel][0]
+                                self.send_notice(channel, new_text)
+                            else:
+                                new_text = self.next[channel][0]
+                                del self.next[channel][0]
+                                self.send_notice(channel, new_text[1])
+                            return
+
+                        else:
+                            self.send_ok(channel, 'No more "next" queued.')
+
+                    else:
+                        self.next[channel] = []
+
+                        for i in range(0, 8):  # to prevent infinite alias-loops
+                            rc = self.check_aliasses(text[1:], prefix, True, channel)
+
+                            if rc != None:
+                                is_command, new_text, is_notice = rc[0]
+                                text = self.cmd_prefix + new_text
+
+                if text[0] == self.cmd_prefix:
+                    parts   = text[1:].split(' ')
+
+                    command = parts[0]
+
+                    if not command in self.plugins:
+                        nick = prefix.split('!')[0].lower()
+
+                        method = self.send_error_notice
+
+                        if channel == self.nick:
+                            channel = prefix
+
+                            if '!' in channel:
+                                channel = channel[0:channel.find('!')]
+
+                            method = self.send_error
+
+                        if command in self.plugins_gone:
+                            method(channel, f'{nick}: command "{command}" is unresponsive for {time.time() - self.plugins_gone[command]:.2f} seconds')
+
+                        else:
+                            rc = self.check_aliasses(text[1:], prefix, False, channel)
+
+                            if rc != None:
+                                is_command, new_text, is_notice = rc[0]
+
+                                if len(rc) > 1:
+                                    self.next[channel] = rc[1:]
+
+                                if is_notice:
+                                    self.send_notice(channel, new_text)
+
+                                else:
+                                    self.send_ok(channel, new_text)
+
+                                return
+
+                            suggestions = set([x for x in self.similar_to(command) if x != None])
+
+                            method(channel, f'{nick}: command "{command}" is not known (maybe {" or ".join(suggestions)}?)')
+
+                    else:
+                        access_granted, group_for_command = self.check_acls(prefix, command)
+
+                        response_channel = (prefix[0:prefix.find('!')] if '!' in prefix else prefix) if channel == self.nick else channel
+
+                        if access_granted:
+                            # returns False when the command is not internal
+                            rc = self.invoke_internal_commands(prefix, command, parts, channel)
+
+                            if rc == self.internal_command_rc.HANDLED:
+                                pass
+
+                            elif rc == self.internal_command_rc.NOT_INTERNAL:
+                                if channel == self.nick:
+                                    person = prefix
+
+                                    if '!' in person:
+                                        person = person[0:person.find('!')]
+
+                                    self.mqtt.publish(f'from/irc/\\{person}/{prefix}/{command}', text)
+
+                                else:
+                                    self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/{command}', text)
+
+                            elif rc == self.internal_command_rc.ERROR:
+                                pass
+
+                            else:
+                                self.send_error(response_channel, f'irc::run: unexpected return code from internal commands handler ({rc})')
+
+                        else:
+                            self.send_error(response_channel, f'Command "{command}" denied for user "{prefix}", one must be in {group_for_command}')
+
+                else:
+                    self.mqtt.publish(f'from/irc/{channel[1:]}/{prefix}/message', args[1])
+
+        elif command == 'NOTICE':
+            if len(args) >= 2:
+                self.mqtt.publish(f'from/irc/{args[0][1:]}/{prefix}/notice', args[1])
+
+        elif command == 'TOPIC':
+            self.topics[args[0][1:]] = args[1]
+
+            self.mqtt.publish(f'from/irc/{args[0][1:]}/topic', args[1])
+
+        elif command == 'INVITE':
+            # do not enter any channel, only the selected
+            for channel in self.channels:
+                if self.send(f'JOIN {channel}') == False:
+                    self._set_state(self.session_state.DISCONNECTING)
+
+                    break
+
+        else:
+            print(f'irc::run: command "{command}" is not known (for {prefix})')
 
     def irc_command_insertion_point(self, prefix, command, arguments):
         return True
@@ -538,7 +537,7 @@ class ircbot(threading.Thread):
 
                     if lf_index == -1:
                         continue
-
+                
                 line = buffer[0:lf_index].rstrip('\r').strip()
                 buffer = buffer[lf_index + 1:]
 
@@ -568,13 +567,15 @@ class irc_keepalive(threading.Thread):
     def run(self):
         while True:
             try:
-                if self.i.get_state() == ircbot.session_state.RUNNING:
-                    self.i.send('TIME')
+                last_ping = time.time() - self.i.last_ping
+                
+                if last_ping >= 600:
+                    print(f'irc_keepalive::run: no PING for {last_ping} seconds')
+                    # tell systemd to restart the service
+                    import os
+                    os.exit(1)
 
-                    time.sleep(30)
-
-                else:
-                    time.sleep(5)
+                time.sleep(1)
 
             except Exception as e:
                 print(f'irc_keepalive::run: exception {e}')

@@ -25,8 +25,8 @@ class ghbot(ircbot):
         ERROR        = 0x10
         NOT_INTERNAL = 0xff
 
-    def __init__(self, host, port, nick, password, channels, m, db, cmd_prefix, local_plugin_subdir, use_notice):
-        super().__init__(host, port, nick, password, channels, use_notice)
+    def __init__(self, host, port, nick, password, channels, m, db, cmd_prefix, local_plugin_subdir, use_notice, owner):
+        super().__init__(host, port, nick, password, channels, use_notice, owner)
 
         self.cmd_prefix    = cmd_prefix
 
@@ -42,39 +42,42 @@ class ghbot(ircbot):
 
         now                = time.time()
 
+        here = socket.gethostname()
         #                          v make these into dictionaries v  TODO
-        self.plugins['addacl']   = ['Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops', now, 'root', 'localhost', 'acls']
-        self.plugins['delacl']   = ['Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops', now, 'root', 'localhost', 'acls']
-        self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now, 'root', 'localhost', 'acls']
-        self.plugins['deluser']  = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'root', 'localhost', 'acls']
-        self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now, 'root', 'localhost', 'acls']
-        self.plugins['meet']     = ['Use this when a user (nick) has a new hostname: meet <nick>', 'sysops', now, 'root', 'localhost', 'acls']
-        self.plugins['merge']    = ['Use this to add a host-alias for an existing user (nick): merge <new-nick> <old-nick>', 'sysops', now, 'root', 'localhost', 'acls']
-        self.plugins['commands'] = ['Show list of known commands', None, now, 'root', 'localhost', 'help']
-        self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'root', 'localhost', 'help']
-        self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'root', 'localhost', None]
-        self.plugins['next']     = ['Execute next command from a list', None, now, 'root', 'localhost', None]
-        self.plugins['define']   = ['Define a command that will be replied to with a definable text, format: !define <command> <text... with %m (/me), %q (parameters) and %u (nick of invoker) escapes, %n for notice>', None, now, 'root', 'localhost', 'defines']
-        self.plugins['deldefine']= ['Delete a define (by number)', None, now, 'root', 'localhost', 'defines']
-        self.plugins['alias']    = ['Add a different name for a command, format: !alias <newname> <oldname>', None, now, 'root', 'localhost', 'defines']
-        self.plugins['searchdefine'] = ['Search for defines that match a partial text', None, now, 'root', 'localhost', 'defines']
-        self.plugins['searchalias'] = ['Search for aliases that match a partial text', None, now, 'root', 'localhost', 'defines']
-        self.plugins['viewalias'] = ['Show what an alias is doing', None, now, 'root', 'localhost', 'defines']
-        self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now, 'root', 'localhost', 'acls']
-        self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now, 'root', 'localhost', 'acls']
-        self.plugins['apro']     = ['Show commands that match a partial text', None, now, 'root', 'localhost', 'help']
-        self.plugins['reloadlp'] = ['Reload a "local" plugin', 'sysops', now, 'root', 'localhost', None]
-        self.plugins['listlp']   = ['List "local" plugins', 'sysops', now, 'root', 'localhost', None]
-        self.plugins['showlp']   = ['Show commands of a "local" plugin', 'sysops', now, 'root', 'localhost', None]
-        self.plugins['loadlp']   = ['Load "local" plugins that are not loaded yet', 'sysops', now, 'root', 'localhost', None]
-        self.plugins['helpgroups'] = ['Show a list of all help-groups there are; a help-group is usually per-plugin', None, now, 'root', 'localhost', 'help']
-        self.plugins['showhelpgroup'] = ['Show plugins in a help-group', None, now, 'root', 'localhost', 'help']
-
+        self.plugins['addacl']   = ['Add an ACL, format: addacl user|group <user|group> group|cmd <group-name|cmd-name>', 'sysops', now, 'root', here, 'acls']
+        self.plugins['delacl']   = ['Remove an ACL, format: delacl <user> group|cmd <group-name|cmd-name>', 'sysops', now, 'root', here, 'acls']
+        self.plugins['listacls'] = ['List all ACLs for a user or group', 'sysops', now, 'root', here, 'acls']
+        self.plugins['deluser']  = ['Forget a person; removes all ACLs for that nick', 'sysops', now, 'root', here, 'acls']
+        self.plugins['clone']    = ['Clone ACLs from one user to another', 'sysops', now, 'root', here, 'acls']
+        self.plugins['meet']     = ['Use this when a user (nick) has a new hostname: meet <nick>', 'sysops', now, 'root', here, 'acls']
+        self.plugins['merge']    = ['Use this to add a host-alias for an existing user (nick): merge <new-nick> <old-nick>', 'sysops', now, 'root', here, 'acls']
+        self.plugins['commands'] = ['Show list of known commands', None, now, 'root', here, 'help']
+        self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'root', here, 'help']
+        self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'root', here, None]
+        self.plugins['next']     = ['Execute next command from a list', None, now, 'root', here, None]
+        self.plugins['define']   = ['Define a command that will be replied to with a definable text, format: !define <command> <text... with %m (/me), %q (parameters) and %u (nick of invoker) escapes, %n for notice>', None, now, 'root', here, 'defines']
+        self.plugins['deldefine']= ['Delete a define (by number)', None, now, 'root', here, 'defines']
+        self.plugins['alias']    = ['Add a different name for a command, format: !alias <newname> <oldname>', None, now, 'root', here, 'defines']
+        self.plugins['searchdefine'] = ['Search for defines that match a partial text', None, now, 'root', here, 'defines']
+        self.plugins['searchalias'] = ['Search for aliases that match a partial text', None, now, 'root', here, 'defines']
+        self.plugins['viewalias'] = ['Show what an alias is doing', None, now, 'root', here, 'defines']
+        self.plugins['listgroups']= ['Shows a list of available groups', 'sysops', now, 'root', here, 'acls']
+        self.plugins['showgroup']= ['Shows a list of commands or members in a group (showgroup commands|members <groupname>)', 'sysops', now, 'root', here, 'acls']
+        self.plugins['apro']     = ['Show commands that match a partial text', None, now, 'root', here, 'help']
+        self.plugins['reloadlp'] = ['Reload a "local" plugin', 'sysops', now, 'root', here, None]
+        self.plugins['listlp']   = ['List "local" plugins', 'sysops', now, 'root', here, None]
+        self.plugins['showlp']   = ['Show commands of a "local" plugin', 'sysops', now, 'root', here, None]
+        self.plugins['loadlp']   = ['Load "local" plugins that are not loaded yet', 'sysops', now, 'root', here, None]
+        self.plugins['helpgroups'] = ['Show a list of all help-groups there are; a help-group is usually per-plugin', None, now, 'root', here, 'help']
+        self.plugins['showhelpgroup'] = ['Show plugins in a help-group', None, now, 'root', here, 'help']
+        self.plugins['setnick']   = ['change the nick of the bot', 'sysops', now, 'folkert', here, None]
         self.prio_plugins = ('help', 'helpgroups', 'showhelpgroup')
 
         self.hardcoded_plugins = set()
         for p in self.plugins:
             self.hardcoded_plugins.add(p)
+
+        self.mqtt_plugins_with_testament = set()
 
         for local_plugin in self.local_plugins.list_plugins():  # iterate over each plugin .py-file
             all_commands = self.local_plugins.get_commandos(local_plugin)
@@ -90,26 +93,30 @@ class ghbot(ircbot):
         self.topic_topic   = []
 
         self.topic_to_nick = f'to/irc-person/'
-
+        
         for channel in self.channels:
-            self.topic_privmsg.append(f'to/irc/{channel[1:]}/privmsg')  # Send reply in channel via PRIVMSG
-            self.topic_notice.append(f'to/irc/{channel[1:]}/notice')   # Send reply in channel via NOTICE
-            self.topic_topic.append(f'to/irc/{channel[1:]}/topic')    # Sets TOPIC for channel
+           self.topic_privmsg.append(f'to/irc/{channel[1:]}/privmsg')  # Send reply in channel via PRIVMSG
+           self.topic_notice.append(f'to/irc/{channel[1:]}/notice')   # Send reply in channel via NOTICE
+           self.topic_topic.append(f'to/irc/{channel[1:]}/topic')    # Sets TOPIC for channel
+    
 
         self.topic_register = f'to/bot/register'  # topic where plugins announce themselves
+        self.topic_register_t = f'to/bot/register-testament'  # topic where plugins announce themselves, with testament e.g. don't need constantly refresh
+        self.topic_unregister = f'to/bot/unregister'
 
         self.topic_request = f'to/bot/request'  # topic where plugins request bot-actions
 
         self.mqtt.subscribe(self.topic_request, self._recv_msg_cb)
+        self.mqtt.subscribe("GHBot/from/irc/#", self._recv_msg_cb)
 
-        for topic in self.topic_privmsg:
-            self.mqtt.subscribe(topic, self._recv_msg_cb)
+        #for topic in self.topic_privmsg:
+        #    self.mqtt.subscribe(topic, self._recv_msg_cb)
 
-        for topic in self.topic_notice:
-            self.mqtt.subscribe(topic, self._recv_msg_cb)
+        #for topic in self.topic_notice:
+        #    self.mqtt.subscribe(topic, self._recv_msg_cb)
 
-        for topic in self.topic_topic:
-            self.mqtt.subscribe(topic, self._recv_msg_cb)
+        #for topic in self.topic_topic:
+        #    self.mqtt.subscribe(topic, self._recv_msg_cb)
 
         self.mqtt.subscribe('to/irc/#', self._recv_msg_cb)  # required for pm-commands :-/
         self.pm_topic = 'to/irc/\\'  # to match on
@@ -117,6 +124,8 @@ class ghbot(ircbot):
         self.mqtt.subscribe(self.topic_to_nick + '#', self._recv_msg_cb)
 
         self.mqtt.subscribe(self.topic_register, self._recv_msg_cb)
+        self.mqtt.subscribe(self.topic_register_t, self._recv_msg_cb)
+        self.mqtt.subscribe(self.topic_unregister, self._recv_msg_cb)
 
         self.host        = host
         self.port        = port
@@ -156,12 +165,11 @@ class ghbot(ircbot):
                 self.plugins_lock.acquire()
 
                 for plugin in self.plugins:
-                    if now - self.plugins[plugin][2] >= 10. and plugin not in self.hardcoded_plugins:  # 5 seconds timeout
+                    if now - self.plugins[plugin][2] >= 60. and plugin not in self.hardcoded_plugins and not plugin in self.mqtt_plugins_with_testament:  # 5 seconds timeout
                         to_delete.append(plugin)
 
                 for plugin in to_delete:
                     del self.plugins[plugin]
-
                     self.plugins_gone[plugin] = now
 
                 self.plugins_lock.release()
@@ -170,12 +178,25 @@ class ghbot(ircbot):
                 print(f'_plugin_cleaner: failed to clean: {e}')
 
     def _plugin_command(self, cmd):
+        print("MQTT publish: from/bot/command > " + str(cmd))
         self.mqtt.publish('from/bot/command', cmd, persistent=False)
 
     def _plugin_parameter(self, key, value, persistent):
         self.mqtt.publish(f'from/bot/parameter/{key}', value, persistent=persistent)
 
-    def _register_plugin(self, msg):
+    def _unregister_plugin(self, msg):
+        commands = msg.split(',')
+
+        now = time.time()
+
+        for cmd in commands:
+            if not cmd in self.hardcoded_plugins:
+                del self.plugins[cmd]
+                if cmd in self.plugins_gone:
+                    del self.plugins_gone[cmd]
+                    self.plugins_gone[cmd] = now
+
+    def _register_plugin(self, msg, with_refresh):
         self.plugins_lock.acquire()
 
         try:
@@ -219,6 +240,9 @@ class ghbot(ircbot):
                     if cmd in self.plugins_gone:
                         del self.plugins_gone[cmd]
 
+                    if not with_refresh:
+                        self.mqtt_plugins_with_testament.add(cmd)
+
                 else:
                     print(f'_register_plugin: cannot override "hardcoded" plugin ({cmd})')
 
@@ -236,15 +260,13 @@ class ghbot(ircbot):
 
     def _recv_msg_cb(self, topic, msg):
         try:
-            # print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
+            #print(f'irc::_recv_msg_cb: received "{msg}" for topic {topic}')
 
             topic = topic[len(self.mqtt.get_topix_prefix()):]
-
             parts = topic.split('/')
 
             if msg.find('\n') != -1 or msg.find('\r') != -1:
                 print(f'irc::_recv_msg_cb: invalid content to send for {topic}')
-
                 return
 
             if topic in self.topic_privmsg:
@@ -262,7 +284,13 @@ class ghbot(ircbot):
                     self._send_topics_to_plugins()
 
             elif topic in self.topic_register:
-                self._register_plugin(msg)
+                self._register_plugin(msg, True)
+
+            elif topic in self.topic_register_t:
+                self._register_plugin(msg, False)
+
+            elif topic in self.topic_unregister:
+                self._unregister_plugin(msg)
 
             elif parts[0] + '/' + parts[1] in self.topic_to_nick:
                 if parts[-1].lower() == 'mode':
@@ -631,6 +659,17 @@ class ghbot(ircbot):
             except Exception as e:
                 return (False, f'irc::del_define: failed to delete alias {nr} ({e})')
 
+    def search_help(self, word):
+        results = []
+        word = word.lower()
+        for command in self.plugins:
+            text = self.plugins[command][0].lower()
+            if word in text:
+                results.append(command)
+                if len(results) >= 4:
+                    break
+        return results
+
     def similar_to(self, wrong):
         best_score        = 1000
         best_alternative  = '(no suggestion)'
@@ -660,9 +699,7 @@ class ghbot(ircbot):
         with self.db.db.cursor() as cursor:
             try:
                 cursor.execute('SELECT command FROM aliasses WHERE command SOUNDS LIKE %s', (wrong,))
-
                 row = cursor.fetchone()
-
                 results.append(row[0])
 
             except Exception as e:
@@ -1117,9 +1154,9 @@ class ghbot(ircbot):
                     self.send_ok(channel, f'Command {cmd}: {self.plugins[cmd][0]} (group: {self.plugins[cmd][1]})')
 
                 else:
-                    suggestions = set([x for x in self.similar_to(cmd) if x != None])
-
-                    self.send_error(channel, f'Command/plugin not known (maybe {" or ".join(suggestions)}?)')
+                    suggestions = [x for x in self.similar_to(cmd) if x != None]
+                    suggestions += [x for x in self.search_help(cmd) if x != None]
+                    self.send_error(channel, f'Command/plugin not known (maybe {" or ".join(set(suggestions))}?)')
 
                 self.plugins_lock.release()
 
@@ -1359,6 +1396,10 @@ class ghbot(ircbot):
             self.send_ok(channel, f'Local plugins {which} NOT reloaded')
 
             return self.internal_command_rc.HANDLED
+        
+        elif command == "setnick":
+            self.send_ok(channel, f'Done {splitted_args[1]}')
+            self.send(f"NICK {splitted_args[1]}")
 
         elif command == 'loadlp':
             which = self.local_plugins.load_modules()
@@ -1429,7 +1470,10 @@ db = dbi(config['db']['host'], config['db']['user'], config['db']['password'], c
 m = mqtt_handler(config['mqtt']['host'], int(config['mqtt']['port']), config['mqtt']['prefix'])
 
 # host, port, nick, channel, m, db, command_prefix
-g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], config['irc']['password'], config['irc']['channels'].split(','), m, db, config['irc']['prefix'], 'plugins', config['general']['use-notice'].lower() == 'true')
+g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], 
+          config['irc']['password'], config['irc']['channels'].split(','), m, db,
+          config['irc']['prefix'], 'plugins', config['general']['use-notice'].lower() == 'true',
+          config['irc']['owner'])
 
 ka = irc_keepalive(g)
 

@@ -9,7 +9,7 @@ class mqtt_handler(threading.Thread):
     def __init__(self, broker_ip, broker_port, topic_prefix):
         super().__init__()
 
-        self.client = mqtt.Client()
+        self.client = mqtt.Client(client_id='harkbot_ghbot_daemon', clean_session=False)
 
         self.topic_prefix = topic_prefix
 
@@ -39,7 +39,6 @@ class mqtt_handler(threading.Thread):
         print(f'mqtt_handler::topic: subscribe to {self.topic_prefix}{topic}')
 
         self.topics.append((self.topic_prefix + topic, msg_recv_cb))
-
         self.client.subscribe(self.topic_prefix + topic)
 
     def publish(self, topic, content, **attributes):
@@ -54,7 +53,6 @@ class mqtt_handler(threading.Thread):
     def on_connect(self, client, userdata, flags, rc):
         for topic in self.topics:
             print(f'mqtt_handler::topic: re-subscribe to {topic[0]}')
-
             self.client.subscribe(topic[0])
 
     def on_message(self, client, userdata, msg):

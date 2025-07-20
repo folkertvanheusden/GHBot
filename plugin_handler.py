@@ -72,6 +72,6 @@ if __name__ == "__main__":
 
     plugins.process('test', '!door_open')
 
-    print(plugins.get_commandos('ghb_door'))
+    print(plugins.get_commandos('doorcontrol'))
 
-    print(plugins.reload_module('ghb_door'))
+    print(plugins.reload_module('doorcontrol'))
