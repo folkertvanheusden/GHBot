@@ -89,7 +89,7 @@ class ircbot(threading.Thread):
     state_timeout = 120         # state changes must not take longer than this
     last_ping     = time.time() # last time a PING was sent
 
-    def __init__(self, host, port, nick, password, channels, use_notice):
+    def __init__(self, host, port, nick, password, channels, use_notice, owner):
         super().__init__()
 
         self.use_notice  = use_notice
@@ -105,7 +105,7 @@ class ircbot(threading.Thread):
 
         self.fd          = None
 
-        self.owner       = 'melan'
+        self.owner       = owner
 
         self.state       = self.session_state.DISCONNECTED
         self.state_since = time.time()
@@ -314,11 +314,20 @@ class ircbot(threading.Thread):
                 text    = args[1]
 
                 if text[0] == self.cmd_prefix:
-                    if text[1:] == 'next':
+                    if text[1:] == 'next' or text[1:6] == 'next ':
                         if len(self.next[channel]) > 0:
-                            new_text = self.next[channel][0]
-                            del self.next[channel][0]
-                            self.send_notice(channel, new_text[1])
+                            if '-a' in text:
+                                new_text = ''
+                                while len(new_text) < 450 and len(self.next[channel]) > 0:
+                                    if new_text != '':
+                                        new_text += ' / '
+                                    new_text += self.next[channel][0][1]
+                                    del self.next[channel][0]
+                                self.send_notice(channel, new_text)
+                            else:
+                                new_text = self.next[channel][0]
+                                del self.next[channel][0]
+                                self.send_notice(channel, new_text[1])
                             return
 
                         else:
