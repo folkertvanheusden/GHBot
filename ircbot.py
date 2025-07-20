@@ -567,28 +567,15 @@ class irc_keepalive(threading.Thread):
     def run(self):
         while True:
             try:
-                # if self.i.get_state() == ircbot.session_state.RUNNING:
-                #     self.i.send('TIME')
-
-                #     time.sleep(30)
-
-                # else:
-                #     time.sleep(5)
                 last_ping = time.time() - self.i.last_ping
                 
-                if last_ping >= 800:
+                if last_ping >= 600:
                     print(f'irc_keepalive::run: no PING for {last_ping} seconds')
                     # tell systemd to restart the service
                     import os
-                    os.system('/usr/bin/sudo /bin/systemctl restart nurdbot.service')
+                    os.exit(1)
 
-                
                 time.sleep(1)
-                # if time.time() - self.i.last_ping >= 300 or self.i.get_state() != ircbot.session_state.RUNNING:
-                #     print(f'irc_keepalive::run: no PING for {time.time() - self.i.last_ping} seconds')
-                #     # tell systemd to restart the service
-                #     import os
-                #     os.system('/usr/bin/sudo /bin/systemctl restart nurdbot.service')
 
             except Exception as e:
                 print(f'irc_keepalive::run: exception {e}')
