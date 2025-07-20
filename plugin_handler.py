@@ -18,14 +18,18 @@ class plugins_class:
     def load_modules(self):
         which = []
 
-        for filename in os.listdir(self.directory):
-            name_only = filename.rstrip('.py')
+        try:
+            for filename in os.listdir(self.directory):
+                name_only = filename.rstrip('.py')
 
-            if filename[0:len(self.name_prefix)] == self.name_prefix and not name_only in self.plugins:
-                full_name = f'{self.directory}.{name_only}'
-                self.plugins[name_only] = importlib.import_module(full_name)
+                if filename[0:len(self.name_prefix)] == self.name_prefix and not name_only in self.plugins:
+                    full_name = f'{self.directory}.{name_only}'
+                    self.plugins[name_only] = importlib.import_module(full_name)
 
-                which.append(name_only)
+                    which.append(name_only)
+
+        except Exception as e:
+            print(f'while loading modules: "{e}" at line number: {e.__traceback__.tb_lineno}')
 
         return which
 
