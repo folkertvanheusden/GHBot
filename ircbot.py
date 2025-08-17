@@ -485,7 +485,7 @@ class ircbot(threading.Thread):
                     self.fd.close()
 
             elif self.state == self.session_state.CONNECTED_PASS:
-                if self.send(f'PASS {self.password}'):
+                if self.password == '' or self.password == None or self.send(f'PASS {self.password}'):
                     self._set_state(self.session_state.CONNECTED_NICK)
 
             elif self.state == self.session_state.CONNECTED_NICK:
