@@ -16,6 +16,7 @@ import socket
 import sys
 import threading
 import time
+import token_bucket
 import traceback
 
 
@@ -25,7 +26,7 @@ class ghbot(ircbot):
         ERROR        = 0x10
         NOT_INTERNAL = 0xff
 
-    def __init__(self, host, port, nick, password, channels, m, db, cmd_prefix, local_plugin_subdir, use_notice, owner):
+    def __init__(self, host, port, nick, password, channels, m, db, cmd_prefix, local_plugin_subdir, use_notice, owner, rl_settings):
         super().__init__(host, port, nick, password, channels, use_notice, owner)
 
         self.cmd_prefix    = cmd_prefix
@@ -33,6 +34,7 @@ class ghbot(ircbot):
         self.db            = db
 
         self.mqtt          = m
+        self.rl_settings   = rl_settings
 
         self.plugins       = dict()
         self.plugins_lock  = threading.Lock()
@@ -138,6 +140,8 @@ class ghbot(ircbot):
         self.state_since = time.time()
 
         self.users       = dict()
+        self.user_rl     = dict()  # rate limiting
+        self.user_rl_mentioned = dict()  # rate limiting
 
         self.name = 'GHBot IRC'
         self.start()
@@ -835,6 +839,17 @@ class ghbot(ircbot):
             return rc
 
     def invoke_internal_commands(self, prefix, command, splitted_args, channel):
+        if not self.rl_settings is None:
+            if not prefix in self.user_rl:
+                self.user_rl[prefix] = token_bucket.TokenBucket(self.rl_settings[0], self.rl_settings[1])  # max x commands in y seconds
+                self.user_rl_mentioned[prefix] = False
+            if self.user_rl[prefix].allow_request() == False:
+                if self.user_rl_mentioned[prefix] == False:
+                    self.send_error(channel, f'Rate limited, please wait {self.rl_settings[0]:.2f} seconds')
+                    self.user_rl_mentioned[prefix] = True
+                return self.internal_command_rc.HANDLED
+            self.user_rl_mentioned[prefix] = False
+
         identifier  = None
 
         target_type = None
@@ -1469,11 +1484,16 @@ db = dbi(config['db']['host'], config['db']['user'], config['db']['password'], c
 # broker_ip, topic_prefix
 m = mqtt_handler(config['mqtt']['host'], int(config['mqtt']['port']), config['mqtt']['prefix'])
 
+# rate limiting
+rate_limiting = None
+if 'rate_limiting' in config:
+    rate_limiting = (float(config['rate_limiting']['capacity']), float(config['rate_limiting']['refill_rate']))
+
 # host, port, nick, channel, m, db, command_prefix
 g = ghbot(config['irc']['host'], int(config['irc']['port']), config['irc']['nick'], 
           config['irc']['password'], config['irc']['channels'].split(','), m, db,
           config['irc']['prefix'], 'plugins', config['general']['use-notice'].lower() == 'true',
-          config['irc']['owner'])
+          config['irc']['owner'], rate_limiting)
 
 ka = irc_keepalive(g)
 
