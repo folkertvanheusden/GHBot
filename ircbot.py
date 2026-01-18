@@ -2,6 +2,7 @@
 
 from enum import Enum
 import math
+import os
 import select
 import socket
 import sys
@@ -350,7 +351,6 @@ class ircbot(threading.Thread):
 
                     if not command in self.plugins:
                         nick = prefix.split('!')[0].lower()
-
                         method = self.send_error_notice
 
                         if channel == self.nick:
@@ -369,13 +369,11 @@ class ircbot(threading.Thread):
 
                             if rc != None:
                                 is_command, new_text, is_notice = rc[0]
-
                                 if len(rc) > 1:
                                     self.next[channel] = rc[1:]
 
                                 if is_notice:
                                     self.send_notice(channel, new_text)
-
                                 else:
                                     self.send_ok(channel, new_text)
 

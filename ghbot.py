@@ -54,7 +54,7 @@ class ghbot(ircbot):
         self.plugins['commands'] = ['Show list of known commands', None, now, 'root', here, 'help']
         self.plugins['help']     = ['Help for commands, parameter is the command to get help for', None, now, 'root', here, 'help']
         self.plugins['more']     = ['Continue outputting a too long line of text', None, now, 'root', here, None]
-        self.plugins['next']     = ['Execute next command from a list', None, now, 'root', here, None]
+        self.plugins['next-define']     = ['Execute next command from a list', None, now, 'root', here, None]
         self.plugins['define']   = ['Define a command that will be replied to with a definable text, format: !define <command> <text... with %m (/me), %q (parameters) and %u (nick of invoker) escapes, %n for notice>', None, now, 'root', here, 'defines']
         self.plugins['deldefine']= ['Delete a define (by number)', None, now, 'root', here, 'defines']
         self.plugins['alias']    = ['Add a different name for a command, format: !alias <newname> <oldname>', None, now, 'root', here, 'defines']
@@ -323,7 +323,6 @@ class ghbot(ircbot):
             cursor.execute('SELECT main_account FROM account_aliasses WHERE account=%s', (who.lower(),))
 
             row = cursor.fetchone()
-
             if row != None:
                 who = row[0].lower()
 
@@ -343,7 +342,6 @@ class ghbot(ircbot):
         plugin_group = self.plugins[command][1]
 
         self.plugins_lock.release()
-
         self.db.probe()  # to prevent those pesky "sever has gone away" problems
 
         with self.db.db.cursor() as cursor:
@@ -353,7 +351,6 @@ class ghbot(ircbot):
             cursor.execute('SELECT COUNT(*) FROM acls WHERE command=%s AND who=%s', (command.lower(), who.lower()))
 
             row = cursor.fetchone()
-
             if row[0] >= 1:
                 return (True, plugin_group)
 
@@ -361,7 +358,6 @@ class ghbot(ircbot):
             cursor.execute('SELECT COUNT(*) FROM acls, acl_groups WHERE acl_groups.who=%s AND acl_groups.group_name=acls.who AND command=%s', (who.lower(), command.lower()))
 
             row = cursor.fetchone()
-
             if row[0] >= 1:
                 return (True, plugin_group)
 
@@ -482,13 +478,11 @@ class ghbot(ircbot):
 
                 if len(rows) > 1:
                     full_names = [row[0] for row in rows]
-
                     return (False, f'Old user ({old_nick}) is ambiguous: {", ".join(full_names)}')
 
                 print(rows, new_nick)
 
                 cursor.execute('INSERT INTO account_aliasses(main_account, account) VALUES(%s, %s)', (rows[0][0], new_nick.lower()))
-
                 self.db.db.commit()
 
                 return (True, 'Ok')
@@ -753,14 +747,9 @@ class ghbot(ircbot):
             if len(rows) == 0:
                 return None
 
+            query_text = ''
             space = text.find(' ')
-            if space == -1:
-                query_text = username
-
-                if '!' in query_text:
-                    query_text = query_text[0:query_text.find('!')]
-
-            else:
+            if space != -1:
                 query_text = text[space + 1:]
 
             rc = []
@@ -836,9 +825,7 @@ class ghbot(ircbot):
 
     def invoke_internal_commands(self, prefix, command, splitted_args, channel):
         identifier  = None
-
         target_type = None
-
         check_user  = '(not given)'
 
         if channel == self.nick:
@@ -850,12 +837,10 @@ class ghbot(ircbot):
         if splitted_args != None and len(splitted_args) >= 2:
             if len(splitted_args) >= 3:  # addacl
                 target_type = splitted_args[1]
-
                 check_user  = splitted_args[2].lower()
 
             else:
                 target_type = None
-
                 check_user  = splitted_args[1].lower()
 
             if check_user in self.users:
