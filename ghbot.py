@@ -782,7 +782,11 @@ class ghbot(ircbot):
                 if len(query_text) > 0:
                     text = text.replace('%q', query_text)
                     text = text.replace('%Q', query_text.upper())
+                else:
+                    text = text.replace('%q', username)
+                    text = text.replace('%Q', username.upper())
 
+                if len(query_text) > 0:
                     text = text.replace('%d', query_text.split()[0])
                     text = text.replace('%D', query_text.split()[0].upper())
 
